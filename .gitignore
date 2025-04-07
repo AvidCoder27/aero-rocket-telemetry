@@ -1,0 +1,5 @@
+# environment stuff
+.envrc
+env
+# simulated and fake data
+sim_data.csv

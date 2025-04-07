@@ -1,0 +1,116 @@
+pkg load signal
+
+# Load IMU data from CSV
+# Expected CSV format: time, LAX, LAY, LAZ, QW, QX, QY, QZ
+data = csvread('sim_data.csv');
+
+t = data(:,1);
+sampleRate = 1 / mean(diff(t));  % Compute sample rate from timestamps
+LAX = data(:,2);
+LAY = data(:,3);
+LAZ = data(:,4);
+QW  = data(:,5);
+QX  = data(:,6);
+QY  = data(:,7);
+QZ  = data(:,8);
+
+n = length(t);
+Q = [QW QX QY QZ];
+LA = [LAX LAY LAZ];
+
+# Quaternion rotation function
+function v_rot = quatrotate(q, v)
+  % q: Nx4 quaternion [w x y z]
+  % v: Nx3 vectors to rotate
+  n = size(q, 1);
+  v_rot = zeros(n, 3);
+  for i = 1:n
+    qw = q(i,1); qx = q(i,2); qy = q(i,3); qz = q(i,4);
+    q_vec = [qx, qy, qz];
+    u = q_vec;
+    s = qw;
+    v_i = v(i,:);
+    v_rot(i,:) = 2*dot(u,v_i)*u + (s^2 - dot(u,u))*v_i + 2*s*cross(u,v_i);
+  end
+end
+
+# Rotate acceleration to inertial frame
+LAR = quatrotate(Q, LA);
+LAXR = LAR(:,1);
+LAYR = LAR(:,2);
+LAZR = LAR(:,3);
+
+# Fifth Order Butterworth Hi-Pass Filter, Cut-Off at approx. 0.36 Hz
+[b,a] = butter(5, 0.017, 'high');
+
+# Filter accelerations 
+FLAX = LAXR; #filtfilt(b, a, LAXR);
+FLAY = LAYR; #filtfilt(b, a, LAYR);
+FLAZ = LAZR; #filtfilt(b, a, LAZR);
+
+# Integrate to get velocities
+VX = cumtrapz(FLAX / sampleRate);
+VY = cumtrapz(FLAY / sampleRate);
+VZ = cumtrapz(FLAZ / sampleRate);
+
+# Filter velocities
+FVX = VX; #filtfilt(b, a, VX);
+FVY = VY; #filtfilt(b, a, VY);
+FVZ = VZ; #filtfilt(b, a, VZ);
+
+# Integrate to get positions
+PX = cumtrapz(FVX / sampleRate);
+PY = cumtrapz(FVY / sampleRate);
+PZ = cumtrapz(FVZ / sampleRate);
+
+# Acceleration Plots
+figure;
+subplot(3,1,1); plot(t, FLAX); title('Acceleration X');
+subplot(3,1,2); plot(t, FLAY); title('Acceleration Y');
+subplot(3,1,3); plot(t, FLAZ); title('Acceleration Z');
+
+# Velocity Plots
+figure;
+subplot(3,1,1); plot(t, FVX); title('Velocity X');
+subplot(3,1,2); plot(t, FVY); title('Velocity Y');
+subplot(3,1,3); plot(t, FVZ); title('Velocity Z');
+
+# Position Plots
+figure;
+subplot(3,1,1); plot(t, PX); title('Position X');
+subplot(3,1,2); plot(t, PY); title('Position Y');
+subplot(3,1,3); plot(t, PZ); title('Position Z');
+
+# Z plots
+figure;
+subplot(3,1,1); plot(t, LAZ); title('Acceleration Z');
+subplot(3,1,2); plot(t, VZ); title('Velocity Z');
+subplot(3,1,3); plot(t, PZ); title('Position Z');
+
+% === MAXIMUM ALTITUDE ===
+[max_altitude, max_index] = max(PZ);
+time_max_altitude = t(max_index);
+printf("Maximum altitude: %.2f meters at %.2f seconds\n", max_altitude, time_max_altitude);
+
+% === GROUND IMPACT TIME ===
+impact_index = find(PZ(1:end-1) > 0 & PZ(2:end) <= 0, 1);
+if ~isempty(impact_index)
+  % Interpolate time when PZ crosses zero
+  t1 = t(impact_index);
+  t2 = t(impact_index + 1);
+  p1 = PZ(impact_index);
+  p2 = PZ(impact_index + 1);
+
+  impact_time = t1 - p1 * (t2 - t1) / (p2 - p1);
+  printf("Estimated ground impact time: %.2f seconds\n", impact_time);
+
+else
+  printf("Rocket did not return to the ground during simulation.\n");
+end
+
+
+
+hold on;
+if exist('impact_time', 'var')
+  plot(impact_time, 0, 'ro', 'MarkerSize', 8, 'LineWidth', 2);
+end

@@ -4,6 +4,17 @@ import matplotlib.pyplot as plt
 from scipy.integrate import cumulative_trapezoid
 from scipy.spatial.transform import Rotation as R
 
+# Constants for sensor offsets
+# These values are determined emprically
+# There are just average  from sitting the IMU still
+# Except for the accel_z offset, which is the average minus 9.81
+GYRO_X_OFFSET = -0.01
+GYRO_Y_OFFSET = 0.03
+GYRO_Z_OFFSET = 0.01
+ACCEL_X_OFFSET = 0.41
+ACCEL_Y_OFFSET = -0.30
+ACCEL_Z_OFFSET = 0.15
+
 def load_data(filename):
     df = pd.read_csv(filename, header=None)
     df.columns = ['timestamp', 'accel_x', 'accel_y', 'accel_z', 'gyro_x', 'gyro_y', 'gyro_z']
@@ -18,12 +29,20 @@ def preprocess(df):
 
 def integrate_motion(df):
     acc_body = df[['accel_x', 'accel_y', 'accel_z']].values
-    gyro_rad = df[['gyro_x', 'gyro_y', 'gyro_z']].values
+    gyro = df[['gyro_x', 'gyro_y', 'gyro_z']].values
     dt = df['dt'].values
+
+    # Apply offsets to accelerometer and gyroscope data
+    acc_body[:, 0] -= ACCEL_X_OFFSET
+    acc_body[:, 1] -= ACCEL_Y_OFFSET
+    acc_body[:, 2] -= ACCEL_Z_OFFSET
+    gyro[:, 0] -= GYRO_X_OFFSET
+    gyro[:, 1] -= GYRO_Y_OFFSET
+    gyro[:, 2] -= GYRO_Z_OFFSET
 
     orientations = [R.identity()]
     for i in range(1, len(df)):
-        delta_angle = gyro_rad[i] * dt[i]
+        delta_angle = gyro[i] * dt[i]
         r = R.from_rotvec(delta_angle)
         orientations.append(orientations[-1] * r)
 
@@ -48,16 +67,28 @@ def integrate_motion(df):
 def plot_flight_path(position):
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot(position[:, 0], position[:, 1], position[:, 2], label='Flight Path')
-    ax.set_xlabel('X Position (m)')
-    ax.set_ylabel('Y Position (m)')
-    ax.set_zlabel('Z Position (m)')
+
+    # Full path
+    ax.plot(position[:, 0], position[:, 1], position[:, 2], label='Flight Path', color='blue')
+
+    # Start and end markers
+    ax.scatter(position[0, 0], position[0, 1], position[0, 2], color='green', s=50, label='Launch (Start)')
+    ax.scatter(position[-1, 0], position[-1, 1], position[-1, 2], color='red', s=50, label='Landing (End)')
+
+    # Optional text labels
+    ax.text(position[0, 0], position[0, 1], position[0, 2], 'Start', color='green')
+    ax.text(position[-1, 0], position[-1, 1], position[-1, 2], 'End', color='red')
+
+    ax.set_xlabel('X (m)')
+    ax.set_ylabel('Y (m)')
+    ax.set_zlabel('Z (m)')
     ax.set_title('Rocket Flight Path')
     ax.legend()
     plt.show()
 
+
 def main():
-    filename = 'test_data/log_3_hold_still.csv'  # Change this to your CSV filename
+    filename = 'test_data/log_4_hold_flat.csv'  # Change this to your CSV filename
     df = load_data(filename)
     df = preprocess(df)
     position, velocity, acc_world, acc_body = integrate_motion(df)

@@ -1,5 +1,6 @@
 #include <Adafruit_BMP280.h>
 #include <Adafruit_ICM20649.h>
+#include <Adafruit_ICM20X.h>
 #include <SD.h>
 
 /*
@@ -30,21 +31,21 @@
 
 const int SD_CHIP_SELECT = 10;
 
-Adafruit_ICM20649 imu; // imu
-Adafruit_Sensor *imu_accel, *imu_gyro;
-
 Adafruit_BMP280 bmp; // barometric pressure
 Adafruit_Sensor *bmp_pressure;
 
+Adafruit_ICM20649 imu; // imu
+Adafruit_Sensor *imu_accel, *imu_gyro;
+
 File log_file;
 
-inline void waitForever() {
+void waitForever() {
   while(1) {
     delay(10);
   }
 }
 
-inline void sd_init() {
+void sd_init() {
   Serial.print("Initializing SD card... ");
   if (!SD.begin(SD_CHIP_SELECT)) {
     Serial.println("SD init failed");
@@ -58,7 +59,16 @@ inline void sd_init() {
   Serial.println("SD success!");
 }
 
-inline void imu_init() {
+void open_log_file() {
+  Serial.print("Opening log file... ");
+  log_file = SD.open("datalog.txt", FILE_WRITE);
+  if (!log_file) {
+    Serial.println("Failed to open datalog.txt");
+  }
+  Serial.println("Log file opened!");
+}
+
+void init_imu() {
   Serial.print("Initializing IMU... ");
 
   // open i2c comms with imu
@@ -68,15 +78,11 @@ inline void imu_init() {
   }
 
   imu_accel = imu.getAccelerometerSensor();
-  imu_accel->printSensorDetails();
-
   imu_gyro = imu.getGyroSensor();
-  imu_gyro->printSensorDetails();
-
   Serial.println("IMU success!");
 }
 
-inline void bmp_init() {
+void init_bmp() {
   Serial.print("Initializing BMP... ");
   if (!bmp.begin()) {
     Serial.print("Failed to find BMP, SensorID was: 0x");
@@ -88,42 +94,42 @@ inline void bmp_init() {
     // ID of 0x61 represents a BME 680
   }
 
-  bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
-                Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
-                Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
-                Adafruit_BMP280::FILTER_X16,      /* Filtering. */
-                Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+  // bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
+  //               Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
+  //               Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
+  //               Adafruit_BMP280::FILTER_X16,      /* Filtering. */
+  //               Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
 
   bmp_pressure = bmp.getPressureSensor();
-  bmp_pressure->printSensorDetails();
-
   Serial.println("BMP success!");
-}
-
-void open_log_file() {
-  Serial.print("Opening log file... ");
-  log_file = SD.open("datalog.txt", FILE_WRITE);
-  if (!log_file) {
-    Serial.println("Failed to open datalog.txt");
-  }
-  Serial.println("Log file opened!");
 }
 
 void setup() {
   // Open serial communications
   Serial.begin(9600);
   // wait for Serial Monitor
-  while (!Serial);
+  while (!Serial) delay(10);
+  Serial.println("Started serial communications");
+
+  Wire.end();
+  delay(10);
+  Wire.begin();
+  delay(10);
+
+  delay(100);
+  // init_bmp();
+  delay(100);
+  init_imu();
+  delay(100);
 
   sd_init();
   open_log_file();
-  imu_init();
-  bmp_init();
 
   Serial.println("Initialization complete!");
 }
 
-void loop() {
+void loop() {  
+  return;
   // get sensor data
   sensors_event_t accel_evt, gyro_evt, pressure_evt;
   bmp_pressure->getEvent(&pressure_evt);
@@ -131,23 +137,50 @@ void loop() {
   imu_gyro->getEvent(&gyro_evt);
   
   // make a string for assembling the data to log
-  // [time],[accel x],[accel y],[accel z],[gyro x],[gyro y],[gyro z],[pressure]
+  // [time],[accel x],[accel y],[accel z],[gyro x],[gyro y],[gyro z],[altitude by pressure]
 
   // time in milliseconds
   // accel in m/s^2
   // gyro in rad/sec
   // pressure in hPa
-  String dataString = "";
-  dataString += millis() + ',' + accel_evt.acceleration.x + ',' + accel_evt.acceleration.y + ',' + accel_evt.acceleration.z + ',' + gyro_evt.gyro.x + ',' + gyro_evt.gyro.y + ',' + gyro_evt.gyro.z + ',' + pressure_evt.pressure;
+  // altitude in meters
+
+  Serial.print(millis());
+  Serial.print(",");
+  Serial.print(accel_evt.acceleration.x);
+  Serial.print(",");
+  Serial.print(accel_evt.acceleration.y);
+  Serial.print(",");
+  Serial.print(accel_evt.acceleration.z);
+  Serial.print(",");
+  Serial.print(gyro_evt.gyro.x);
+  Serial.print(",");
+  Serial.print(gyro_evt.gyro.y);
+  Serial.print(",");
+  Serial.print(gyro_evt.gyro.z);
+  Serial.print(",");
+  Serial.println(pressure_evt.pressure);
 
   // if the file is available, write to it
   if (log_file) {
-    log_file.println(dataString);    
-    // print to the serial port too:
-    Serial.println(dataString);
+    log_file.print(millis());
+    log_file.print(",");
+    log_file.print(accel_evt.acceleration.x);
+    log_file.print(",");
+    log_file.print(accel_evt.acceleration.y);
+    log_file.print(",");
+    log_file.print(accel_evt.acceleration.z);
+    log_file.print(",");
+    log_file.print(gyro_evt.gyro.x);
+    log_file.print(",");
+    log_file.print(gyro_evt.gyro.y);
+    log_file.print(",");
+    log_file.print(gyro_evt.gyro.z);
+    log_file.print(",");
+    log_file.println(pressure_evt.pressure);
   }
   // if the file isn't open, pop up an error
   else {
-    Serial.println("ERROR opening datalog.txt !!!!");
+    Serial.println("ERROR opening datalog.txt");
   }
 }

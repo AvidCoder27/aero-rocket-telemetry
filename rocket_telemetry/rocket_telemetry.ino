@@ -108,20 +108,21 @@ void loop() {
   // pressure in hPa
   // altitude in meters
 
-  Serial.print(millis());
-  Serial.print(",");
-  Serial.print(accel_evt.acceleration.x);
-  Serial.print(",");
-  Serial.print(accel_evt.acceleration.y);
-  Serial.print(",");
-  Serial.print(accel_evt.acceleration.z);
-  Serial.print(",");
-  Serial.print(gyro_evt.gyro.x);
-  Serial.print(",");
-  Serial.print(gyro_evt.gyro.y);
-  Serial.print(",");
-  Serial.println(gyro_evt.gyro.z);
+  // Serial.print(millis());
+  // Serial.print(",");
+  // Serial.print(accel_evt.acceleration.x);
+  // Serial.print(",");
+  // Serial.print(accel_evt.acceleration.y);
+  // Serial.print(",");
+  // Serial.print(accel_evt.acceleration.z);
+  // Serial.print(",");
+  // Serial.print(gyro_evt.gyro.x);
+  // Serial.print(",");
+  // Serial.print(gyro_evt.gyro.y);
+  // Serial.print(",");
+  // Serial.println(gyro_evt.gyro.z);
 
+  log_file = SD.open("datalog.txt", FILE_WRITE);
   // if the file is available, write to it
   if (log_file) {
     log_file.print(millis());
@@ -137,6 +138,7 @@ void loop() {
     log_file.print(gyro_evt.gyro.y);
     log_file.print(",");
     log_file.println(gyro_evt.gyro.z);
+    log_file.close();
   }
   // if the file isn't open, pop up an error
   else {

@@ -3,3 +3,5 @@
 env
 # simulated and fake data
 sim_data.csv
+# test data
+test_data/

@@ -146,8 +146,11 @@ void loop() {
   if (log_file) {
     log_file.print(millis());
     log_file.print(",");
-    log_file.print(pressure_evt.pressure);
+    log_file.println(pressure_evt.pressure);
     log_file.close();
+    #ifdef DEBUG
+    Serial.println(pressure_evt.pressure);
+    #endif
   }
   // if the file isn't open, pop up an error
   else {

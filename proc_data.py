@@ -18,9 +18,14 @@ ACCEL_X_OFFSET = 0.41
 ACCEL_Y_OFFSET = -0.30
 ACCEL_Z_OFFSET = 0.15
 
-ACCEL_FILTER_CUTOFF = 5  # Hz
-VEL_FILTER_CUTOFF = 10  # Hz
-POS_FILTER_CUTOFF = 10  # Hz
+# Filter out frequencies above these values
+ACCEL_FILTER_HIGH = 5  # Hz
+VEL_FILTER_HIGH = 3  # Hz
+POS_FILTER_HIGH = 1  # Hz
+
+# Filter out frequencies below these values
+VEL_FILTER_LOW = 0.2  # Hz
+POS_FILTER_LOW = 0.2  # Hz
 
 DO_WORLD_FRAME_ROTATION = True  # Set to True to rotate the accelerometer data into the world frame
 
@@ -40,8 +45,14 @@ def preprocess(df):
     df['dt'] = df['timestamp'].diff().fillna(0)
     return df
 
-def butter_lowpass_filter(data, fs, cutoff, order=4):
+# removes high frequency noise
+def lowpass_filter(data, fs, cutoff, order=4):
     b, a = butter(order, cutoff, btype='lowpass', fs=fs)
+    return filtfilt(b, a, data)
+
+# removes low frequency noise
+def highpass_filter(data, fs, cutoff, order=4):
+    b, a = butter(order, cutoff, btype='highpass', fs=fs)
     return filtfilt(b, a, data)
 
 def integrate_motion(df):
@@ -66,9 +77,9 @@ def integrate_motion(df):
 
     # Filter accel with a simple butterworth hi-pass filter
     # 4th order, cutoff at 5 Hz; filter each dimension separately 
-    filter_acc_x = butter_lowpass_filter(acc_body[:, 0], fs, cutoff=ACCEL_FILTER_CUTOFF)
-    filter_acc_y = butter_lowpass_filter(acc_body[:, 1], fs, cutoff=ACCEL_FILTER_CUTOFF)
-    filter_acc_z = butter_lowpass_filter(acc_body[:, 2], fs, cutoff=ACCEL_FILTER_CUTOFF)
+    filter_acc_x = lowpass_filter(acc_body[:, 0], fs, cutoff=ACCEL_FILTER_HIGH)
+    filter_acc_y = lowpass_filter(acc_body[:, 1], fs, cutoff=ACCEL_FILTER_HIGH)
+    filter_acc_z = lowpass_filter(acc_body[:, 2], fs, cutoff=ACCEL_FILTER_HIGH)
     # recombine the dims after filtering
     filter_acc = np.column_stack((filter_acc_x, filter_acc_y, filter_acc_z))
 
@@ -83,10 +94,15 @@ def integrate_motion(df):
     # Integrate acceleration to velocity and position
     velocity = cumulative_trapezoid(acc_world, timestamp, initial=0, axis=0)
 
-    # Filter the velocity with another butterworth filter but at a lower cutoff frequency 
-    filter_vel_x = butter_lowpass_filter(velocity[:, 0], fs, cutoff=VEL_FILTER_CUTOFF)
-    filter_vel_y = butter_lowpass_filter(velocity[:, 1], fs, cutoff=VEL_FILTER_CUTOFF)
-    filter_vel_z = butter_lowpass_filter(velocity[:, 2], fs, cutoff=VEL_FILTER_CUTOFF)
+    # remove high frequcy noise from velocity
+    filter_vel_x = lowpass_filter(velocity[:, 0], fs, cutoff=VEL_FILTER_HIGH)
+    filter_vel_y = lowpass_filter(velocity[:, 1], fs, cutoff=VEL_FILTER_HIGH)
+    filter_vel_z = lowpass_filter(velocity[:, 2], fs, cutoff=VEL_FILTER_HIGH)
+
+    # remove low frequcy noise from velocity that comes from integration drift
+    filter_vel_x = highpass_filter(filter_vel_x, fs, cutoff=VEL_FILTER_LOW)
+    filter_vel_y = highpass_filter(filter_vel_y, fs, cutoff=VEL_FILTER_LOW)
+    filter_vel_z = highpass_filter(filter_vel_z, fs, cutoff=VEL_FILTER_LOW)
 
     # recombine the dims after filtering
     filter_vel = np.column_stack((filter_vel_x, filter_vel_y, filter_vel_z))
@@ -100,9 +116,14 @@ def integrate_motion(df):
     position = cumulative_trapezoid(filter_vel, timestamp, initial=0, axis=0)
 
     # Filter the position with another butterworth filter but at a lower cutoff frequency
-    filter_pos_x = butter_lowpass_filter(position[:, 0], fs, cutoff=POS_FILTER_CUTOFF)
-    filter_pos_y = butter_lowpass_filter(position[:, 1], fs, cutoff=POS_FILTER_CUTOFF)
-    filter_pos_z = butter_lowpass_filter(position[:, 2], fs, cutoff=POS_FILTER_CUTOFF)
+    filter_pos_x = lowpass_filter(position[:, 0], fs, cutoff=POS_FILTER_HIGH)
+    filter_pos_y = lowpass_filter(position[:, 1], fs, cutoff=POS_FILTER_HIGH)
+    filter_pos_z = lowpass_filter(position[:, 2], fs, cutoff=POS_FILTER_HIGH)
+
+    # remove low frequcy noise from position that comes from integration drift
+    filter_pos_x = highpass_filter(filter_pos_x, fs, cutoff=POS_FILTER_LOW)
+    filter_pos_y = highpass_filter(filter_pos_y, fs, cutoff=POS_FILTER_LOW)
+    filter_pos_z = highpass_filter(filter_pos_z, fs, cutoff=POS_FILTER_LOW)
     
     # recombine the dims after filtering
     filter_pos = np.column_stack((filter_pos_x, filter_pos_y, filter_pos_z))
@@ -242,14 +263,7 @@ def main():
     # plot_acceleration_fft(df)
     acc_raw, gyro, orientations, acc_filter, acc_world, velocity, filter_vel, position, filter_pos = integrate_motion(df)
 
-    # Debug plot
-    # truncate acc_body and filter_acc to only be from time 5 to 15 seconds
-    # acc_body = acc_body[df['timestamp'] < 15]
-    # filter_acc = filter_acc[df['timestamp'] < 15]
-    # df = df[df['timestamp'] < 15]
-    # acc_body = acc_body[df['timestamp'] > 5]
-    # filter_acc = filter_acc[df['timestamp'] > 5]
-    # df = df[df['timestamp'] > 5]
+    # Debug plotting
 
     x_acc_raw = acc_raw[:, 0]
     y_acc_raw = acc_raw[:, 1]
@@ -274,30 +288,58 @@ def main():
     z_pos_filt = filter_pos[:, 2]
     time = df['timestamp']
 
+    # Truncate the data to a specific time window for debugging
+    START_TIME = 15.0
+    END_TIME = 22.0
+    mask = (time > START_TIME) & (time < END_TIME)
+
+    x_acc_raw = x_acc_raw[mask]
+    y_acc_raw = y_acc_raw[mask]
+    z_acc_raw = z_acc_raw[mask]
+    x_acc_filtered = x_acc_filtered[mask]
+    y_acc_filtered = y_acc_filtered[mask]
+    z_acc_filtered = z_acc_filtered[mask]
+    x_acc_world = x_acc_world[mask]
+    y_acc_world = y_acc_world[mask]
+    z_acc_world = z_acc_world[mask]
+    x_vel = x_vel[mask]
+    y_vel = y_vel[mask]
+    z_vel = z_vel[mask]
+    x_vel_filt = x_vel_filt[mask]
+    y_vel_filt = y_vel_filt[mask]
+    z_vel_filt = z_vel_filt[mask]
+    x_pos = x_pos[mask]
+    y_pos = y_pos[mask]
+    z_pos = z_pos[mask]
+    x_pos_filt = x_pos_filt[mask]
+    y_pos_filt = y_pos_filt[mask]
+    z_pos_filt = z_pos_filt[mask]
+    time = time[mask]
+
     plt.figure()
-    plt.plot(time, x_acc_raw, label='X Accel Raw')
-    plt.plot(time, y_acc_raw, label='Y Accel Raw')
-    plt.plot(time, z_acc_raw, label='Z Accel Raw')
+    # plt.plot(time, x_acc_raw, label='X Accel Raw')
+    # plt.plot(time, y_acc_raw, label='Y Accel Raw')
+    # plt.plot(time, z_acc_raw, label='Z Accel Raw')
 
-    plt.plot(time, x_acc_filtered, label='X Accel Filtered')
-    plt.plot(time, y_acc_filtered, label='Y Accel Filtered')
-    plt.plot(time, z_acc_filtered, label='Z Accel Filtered')
+    # plt.plot(time, x_acc_filtered, label='X Accel Filtered')
+    # plt.plot(time, y_acc_filtered, label='Y Accel Filtered')
+    # plt.plot(time, z_acc_filtered, label='Z Accel Filtered')
 
-    plt.plot(time, x_acc_world, label='X Accel World')
-    plt.plot(time, y_acc_world, label='Y Accel World')
-    plt.plot(time, z_acc_world, label='Z Accel World')
+    # plt.plot(time, x_acc_world, label='X Accel World')
+    # plt.plot(time, y_acc_world, label='Y Accel World')
+    # plt.plot(time, z_acc_world, label='Z Accel World')
 
-    plt.plot(time, x_vel, label='X Vel')
-    plt.plot(time, y_vel, label='Y Vel')
-    plt.plot(time, z_vel, label='Z Vel')
+    # plt.plot(time, x_vel, label='X Vel')
+    # plt.plot(time, y_vel, label='Y Vel')
+    # plt.plot(time, z_vel, label='Z Vel')
 
-    plt.plot(time, x_vel_filt, label='X Vel Filtered')
-    plt.plot(time, y_vel_filt, label='Y Vel Filtered')
-    plt.plot(time, z_vel_filt, label='Z Vel Filtered')
+    # plt.plot(time, x_vel_filt, label='X Vel Filtered')
+    # plt.plot(time, y_vel_filt, label='Y Vel Filtered')
+    # plt.plot(time, z_vel_filt, label='Z Vel Filtered')
 
-    plt.plot(time, x_pos, label='X Pos')
-    plt.plot(time, y_pos, label='Y Pos')
-    plt.plot(time, z_pos, label='Z Pos')
+    # plt.plot(time, x_pos, label='X Pos')
+    # plt.plot(time, y_pos, label='Y Pos')
+    # plt.plot(time, z_pos, label='Z Pos')
 
     plt.plot(time, x_pos_filt, label='X Pos Filtered')
     plt.plot(time, y_pos_filt, label='Y Pos Filtered')
@@ -312,7 +354,7 @@ def main():
 
     # anim = animate_orientation(orientations, df['timestamp'])
     # anim.save("animation.mp4")
-    # plot_flight_path(filter_pos)
+    plot_flight_path(filter_pos)
 
 if __name__ == '__main__':
     main()

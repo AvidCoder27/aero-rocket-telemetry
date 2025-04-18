@@ -34,7 +34,7 @@ DEBUG_END_TIME = 100
 
 # Log file name:
 LOG_DIR = "versioned_data/"
-LOG_FILE = "log_7_drop.csv"
+LOG_FILE = "log_8_drop.csv"
 
 def load_data(filename):
     df = pd.read_csv(filename, header=None)

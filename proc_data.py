@@ -19,14 +19,14 @@ ACCEL_Y_OFFSET = -0.30
 ACCEL_Z_OFFSET = 0.15
 
 ACCEL_FILTER_CUTOFF = 5  # Hz
-VEL_FILTER_CUTOFF = 3  # Hz
-POS_FILTER_CUTOFF = 2  # Hz
+VEL_FILTER_CUTOFF = 10  # Hz
+POS_FILTER_CUTOFF = 1  # Hz
 
 DO_WORLD_FRAME_ROTATION = True  # Set to True to rotate the accelerometer data into the world frame
 
 # Log file name:
 LOG_DIR = "test_data/"
-LOG_FILE = "log_5_spin_jump.csv"
+LOG_FILE = "log_6_fake_launches.csv"
 
 def load_data(filename):
     df = pd.read_csv(filename, header=None)
@@ -47,8 +47,8 @@ def butter_lowpass_filter(data, fs, cutoff, order=4):
 def integrate_motion(df):
     acc_body = df[['accel_x', 'accel_y', 'accel_z']].values
     gyro = df[['gyro_x', 'gyro_y', 'gyro_z']].values
-    dt = df['dt'].values
-    fs = 1 / dt.mean()  # Sampling frequency
+    timestamp = df['timestamp']
+    fs = 1 / df['dt'].mean() # Sampling frequency
     print(f"Sampling frequency: {fs:.2f} Hz")
 
     # Apply offsets to accelerometer and gyroscope data
@@ -60,7 +60,7 @@ def integrate_motion(df):
     gyro[:, 2] -= GYRO_Z_OFFSET
 
     # Integrate angular velocity to get rotation vectors
-    rot_vecs = cumulative_trapezoid(gyro, df['timestamp'], initial=0, axis=0)
+    rot_vecs = cumulative_trapezoid(gyro, timestamp, initial=0, axis=0)
     # Convert rotation vectors to rotation objects
     orientations = [R.from_rotvec(rv) for rv in rot_vecs]
 
@@ -81,27 +81,29 @@ def integrate_motion(df):
     acc_world[:, 2] -= 9.81
 
     # Integrate acceleration to velocity and position
-    velocity = cumulative_trapezoid(acc_world, df['timestamp'], initial=0, axis=0)
+    velocity = cumulative_trapezoid(acc_world, timestamp, initial=0, axis=0)
 
     # Filter the velocity with another butterworth filter but at a lower cutoff frequency 
     filter_vel_x = butter_lowpass_filter(velocity[:, 0], fs, cutoff=VEL_FILTER_CUTOFF)
     filter_vel_y = butter_lowpass_filter(velocity[:, 1], fs, cutoff=VEL_FILTER_CUTOFF)
     filter_vel_z = butter_lowpass_filter(velocity[:, 2], fs, cutoff=VEL_FILTER_CUTOFF)
+
     # recombine the dims after filtering
     filter_vel = np.column_stack((filter_vel_x, filter_vel_y, filter_vel_z))
 
     # Use Zero Velocity Update (ZUPT) to remove drift
     # This is done by getting the velocity bias of the stationary rocket
-    vel_bias = filter_vel[0:20].mean(axis=0)
-    filter_vel -= vel_bias
+    # vel_bias = filter_vel[0:20].mean(axis=0)
+    # filter_vel -= vel_bias
 
     # Integrate the filtered velocity to get position
-    position = cumulative_trapezoid(filter_vel, df['timestamp'], initial=0, axis=0)
+    position = cumulative_trapezoid(filter_vel, timestamp, initial=0, axis=0)
 
     # Filter the position with another butterworth filter but at a lower cutoff frequency
     filter_pos_x = butter_lowpass_filter(position[:, 0], fs, cutoff=POS_FILTER_CUTOFF)
     filter_pos_y = butter_lowpass_filter(position[:, 1], fs, cutoff=POS_FILTER_CUTOFF)
     filter_pos_z = butter_lowpass_filter(position[:, 2], fs, cutoff=POS_FILTER_CUTOFF)
+    
     # recombine the dims after filtering
     filter_pos = np.column_stack((filter_pos_x, filter_pos_y, filter_pos_z))
 
@@ -238,7 +240,7 @@ def main():
     df = load_data(filename)
     df = preprocess(df)
     # plot_acceleration_fft(df)
-    acc_body, gyro, orientations, filter_acc, acc_world, velocity, filter_vel, position, filter_pos = integrate_motion(df)
+    acc_raw, gyro, orientations, acc_filter, acc_world, velocity, filter_vel, position, filter_pos = integrate_motion(df)
 
     # Debug plot
     # truncate acc_body and filter_acc to only be from time 5 to 15 seconds
@@ -249,31 +251,68 @@ def main():
     # filter_acc = filter_acc[df['timestamp'] > 5]
     # df = df[df['timestamp'] > 5]
 
+    x_acc_raw = acc_raw[:, 0]
+    y_acc_raw = acc_raw[:, 1]
+    z_acc_raw = acc_raw[:, 2]
+    x_acc_filtered = acc_filter[:, 0]
+    y_acc_filtered = acc_filter[:, 1]
+    z_acc_filtered = acc_filter[:, 2]
+    x_acc_world = acc_world[:, 0]
+    y_acc_world = acc_world[:, 1]
+    z_acc_world = acc_world[:, 2]
+    x_vel = velocity[:, 0]
+    y_vel = velocity[:, 1]
+    z_vel = velocity[:, 2]
+    x_vel_filt = filter_vel[:, 0]
+    y_vel_filt = filter_vel[:, 1]
+    z_vel_filt = filter_vel[:, 2]
+    x_pos = position[:, 0]
+    y_pos = position[:, 1]
+    z_pos = position[:, 2]
+    x_pos_filt = filter_pos[:, 0]
+    y_pos_filt = filter_pos[:, 1]
+    z_pos_filt = filter_pos[:, 2]
+    time = df['timestamp']
+
     plt.figure()
-    #plt.plot(df['timestamp'], acc_body[:, 0], label='X Acc (body)')
-    #plt.plot(df['timestamp'], acc_body[:, 1], label='Y Acc (body)')
-    plt.plot(df['timestamp'], acc_body[:, 2]-9.81, label='Z Acc (body)')
+    plt.plot(time, x_acc_raw, label='X Accel Raw')
+    plt.plot(time, y_acc_raw, label='Y Accel Raw')
+    plt.plot(time, z_acc_raw, label='Z Accel Raw')
 
-    #plt.plot(df['timestamp'], filter_acc[:, 0], label='X Acc (filtered)')
-    #plt.plot(df['timestamp'], filter_acc[:, 1], label='Y Acc (filtered)')
-    plt.plot(df['timestamp'], filter_acc[:, 2]-9.81, label='Z Acc (filtered)')
+    plt.plot(time, x_acc_filtered, label='X Accel Filtered')
+    plt.plot(time, y_acc_filtered, label='Y Accel Filtered')
+    plt.plot(time, z_acc_filtered, label='Z Accel Filtered')
 
-    #plt.plot(df['timestamp'], acc_world[:, 2], label='Z Acc (world)')
-    #plt.plot(df['timestamp'], filter_vel[:, 2], label='Z Vel')
-    #plt.plot(df['timestamp'], filter_pos[:, 2], label='Z Pos')
+    plt.plot(time, x_acc_world, label='X Accel World')
+    plt.plot(time, y_acc_world, label='Y Accel World')
+    plt.plot(time, z_acc_world, label='Z Accel World')
+
+    plt.plot(time, x_vel, label='X Vel')
+    plt.plot(time, y_vel, label='Y Vel')
+    plt.plot(time, z_vel, label='Z Vel')
+
+    plt.plot(time, x_vel_filt, label='X Vel Filtered')
+    plt.plot(time, y_vel_filt, label='Y Vel Filtered')
+    plt.plot(time, z_vel_filt, label='Z Vel Filtered')
+
+    plt.plot(time, x_pos, label='X Pos')
+    plt.plot(time, y_pos, label='Y Pos')
+    plt.plot(time, z_pos, label='Z Pos')
+
+    plt.plot(time, x_pos_filt, label='X Pos Filtered')
+    plt.plot(time, y_pos_filt, label='Y Pos Filtered')
+    plt.plot(time, z_pos_filt, label='Z Pos Filtered')
     
     plt.xlabel("Time (s)")
     plt.ylabel("Value")
-    plt.title("Z-axis Acceleration, Velocity, and Position")
+    plt.title("Debugging IMU Data")
     plt.legend()
     plt.grid(True)
     plt.show()
 
     # anim = animate_orientation(orientations, df['timestamp'])
-    # plt.show(block=True)
     # anim.save("animation.mp4")
-    # plt.close()
-    plot_flight_path(filter_pos)
+    # plot_flight_path(filter_pos)
 
 if __name__ == '__main__':
     main()

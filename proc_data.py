@@ -33,8 +33,8 @@ DEBUG_START_TIME = 0
 DEBUG_END_TIME = 100
 
 # Log file name:
-LOG_DIR = "test_data/"
-LOG_FILE = "log_6_fake_launches_trunc.csv"
+LOG_DIR = "versioned_data/"
+LOG_FILE = "log_7_drop.csv"
 
 def load_data(filename):
     df = pd.read_csv(filename, header=None)

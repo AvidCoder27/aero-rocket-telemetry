@@ -19,19 +19,22 @@ ACCEL_Y_OFFSET = -0.30
 ACCEL_Z_OFFSET = 0.15
 
 # Filter out frequencies above these values
-ACCEL_FILTER_HIGH = 5  # Hz
-VEL_FILTER_HIGH = 3  # Hz
-POS_FILTER_HIGH = 1  # Hz
+ACCEL_HIGH_CUT = 8  # Hz
+VEL_HIGH_CUT = 3  # Hz
+POS_HIGH_CUT = 2  # Hz
 
 # Filter out frequencies below these values
-VEL_FILTER_LOW = 0.2  # Hz
-POS_FILTER_LOW = 0.2  # Hz
+VEL_LOW_CUT = 0.1  # Hz
+POS_LOW_CUT = 0.1  # Hz
 
 DO_WORLD_FRAME_ROTATION = True  # Set to True to rotate the accelerometer data into the world frame
+DISPLAY_DEBUG = False  # Set to True to display debug plots
+DEBUG_START_TIME = 0
+DEBUG_END_TIME = 100
 
 # Log file name:
 LOG_DIR = "test_data/"
-LOG_FILE = "log_6_fake_launches.csv"
+LOG_FILE = "log_6_fake_launches_trunc.csv"
 
 def load_data(filename):
     df = pd.read_csv(filename, header=None)
@@ -46,13 +49,17 @@ def preprocess(df):
     return df
 
 # removes high frequency noise
-def lowpass_filter(data, fs, cutoff, order=4):
-    b, a = butter(order, cutoff, btype='lowpass', fs=fs)
+def lowpass_filter(data, fs, highcut, order=4):
+    b, a = butter(order, highcut, btype='lowpass', fs=fs)
     return filtfilt(b, a, data)
 
 # removes low frequency noise
-def highpass_filter(data, fs, cutoff, order=4):
-    b, a = butter(order, cutoff, btype='highpass', fs=fs)
+def highpass_filter(data, fs, lowcut, order=4):
+    b, a = butter(order, lowcut, btype='highpass', fs=fs)
+    return filtfilt(b, a, data)
+
+def bandpass_filter(data, fs, lowcut, highcut, order=4):
+    b, a = butter(order, [lowcut, highcut], btype='bandpass', fs=fs)
     return filtfilt(b, a, data)
 
 def integrate_motion(df):
@@ -76,15 +83,16 @@ def integrate_motion(df):
     orientations = [R.from_rotvec(rv) for rv in rot_vecs]
 
     # Filter accel with a simple butterworth hi-pass filter
-    # 4th order, cutoff at 5 Hz; filter each dimension separately 
-    filter_acc_x = lowpass_filter(acc_body[:, 0], fs, cutoff=ACCEL_FILTER_HIGH)
-    filter_acc_y = lowpass_filter(acc_body[:, 1], fs, cutoff=ACCEL_FILTER_HIGH)
-    filter_acc_z = lowpass_filter(acc_body[:, 2], fs, cutoff=ACCEL_FILTER_HIGH)
+    # 4th order, cutoff at 5 Hz; filter each dimension separately
+    # No need to low pass filter the acceleration data since no integration has been done yet 
+    filter_acc_x = lowpass_filter(acc_body[:, 0], fs, highcut=ACCEL_HIGH_CUT)
+    filter_acc_y = lowpass_filter(acc_body[:, 1], fs, highcut=ACCEL_HIGH_CUT)
+    filter_acc_z = lowpass_filter(acc_body[:, 2], fs, highcut=ACCEL_HIGH_CUT)
     # recombine the dims after filtering
     filter_acc = np.column_stack((filter_acc_x, filter_acc_y, filter_acc_z))
 
     # Rotate the filtered accelerations into the world frame
-    if (DO_WORLD_FRAME_ROTATION):
+    if DO_WORLD_FRAME_ROTATION:
         acc_world = np.array([orient.apply(acc) for orient, acc in zip(orientations, filter_acc)])
     else:
         acc_world = filter_acc.copy()
@@ -94,15 +102,10 @@ def integrate_motion(df):
     # Integrate acceleration to velocity and position
     velocity = cumulative_trapezoid(acc_world, timestamp, initial=0, axis=0)
 
-    # remove high frequcy noise from velocity
-    filter_vel_x = lowpass_filter(velocity[:, 0], fs, cutoff=VEL_FILTER_HIGH)
-    filter_vel_y = lowpass_filter(velocity[:, 1], fs, cutoff=VEL_FILTER_HIGH)
-    filter_vel_z = lowpass_filter(velocity[:, 2], fs, cutoff=VEL_FILTER_HIGH)
-
-    # remove low frequcy noise from velocity that comes from integration drift
-    filter_vel_x = highpass_filter(filter_vel_x, fs, cutoff=VEL_FILTER_LOW)
-    filter_vel_y = highpass_filter(filter_vel_y, fs, cutoff=VEL_FILTER_LOW)
-    filter_vel_z = highpass_filter(filter_vel_z, fs, cutoff=VEL_FILTER_LOW)
+    # filter velocity to remove high frequency noise from erroneous accelerometer data and low frequency noise from integration drift
+    filter_vel_x = bandpass_filter(velocity[:, 0], fs, lowcut=VEL_LOW_CUT, highcut=VEL_HIGH_CUT)
+    filter_vel_y = bandpass_filter(velocity[:, 1], fs, lowcut=VEL_LOW_CUT, highcut=VEL_HIGH_CUT)
+    filter_vel_z = bandpass_filter(velocity[:, 2], fs, lowcut=VEL_LOW_CUT, highcut=VEL_HIGH_CUT)
 
     # recombine the dims after filtering
     filter_vel = np.column_stack((filter_vel_x, filter_vel_y, filter_vel_z))
@@ -115,15 +118,10 @@ def integrate_motion(df):
     # Integrate the filtered velocity to get position
     position = cumulative_trapezoid(filter_vel, timestamp, initial=0, axis=0)
 
-    # Filter the position with another butterworth filter but at a lower cutoff frequency
-    filter_pos_x = lowpass_filter(position[:, 0], fs, cutoff=POS_FILTER_HIGH)
-    filter_pos_y = lowpass_filter(position[:, 1], fs, cutoff=POS_FILTER_HIGH)
-    filter_pos_z = lowpass_filter(position[:, 2], fs, cutoff=POS_FILTER_HIGH)
-
-    # remove low frequcy noise from position that comes from integration drift
-    filter_pos_x = highpass_filter(filter_pos_x, fs, cutoff=POS_FILTER_LOW)
-    filter_pos_y = highpass_filter(filter_pos_y, fs, cutoff=POS_FILTER_LOW)
-    filter_pos_z = highpass_filter(filter_pos_z, fs, cutoff=POS_FILTER_LOW)
+    # Filter the position data
+    filter_pos_x = bandpass_filter(position[:, 0], fs, lowcut=POS_LOW_CUT, highcut=POS_HIGH_CUT)
+    filter_pos_y = bandpass_filter(position[:, 1], fs, lowcut=POS_LOW_CUT, highcut=POS_HIGH_CUT)
+    filter_pos_z = bandpass_filter(position[:, 2], fs, lowcut=POS_LOW_CUT, highcut=POS_HIGH_CUT)
     
     # recombine the dims after filtering
     filter_pos = np.column_stack((filter_pos_x, filter_pos_y, filter_pos_z))
@@ -260,97 +258,101 @@ def main():
     filename = LOG_DIR + LOG_FILE
     df = load_data(filename)
     df = preprocess(df)
+
+    # print out filtering high and low cut off frequencies
+    print(f"Accel High Cut: {ACCEL_HIGH_CUT} Hz")
+    print(f"Velocity High Cut: {VEL_HIGH_CUT} Hz")
+    print(f"Velocity Low Cut: {VEL_LOW_CUT} Hz")
+    print(f"Position High Cut: {POS_HIGH_CUT} Hz")
+    print(f"Position Low Cut: {POS_LOW_CUT} Hz")
+
     # plot_acceleration_fft(df)
     acc_raw, gyro, orientations, acc_filter, acc_world, velocity, filter_vel, position, filter_pos = integrate_motion(df)
 
-    # Debug plotting
+    if DISPLAY_DEBUG:
+        x_acc_raw = acc_raw[:, 0]
+        y_acc_raw = acc_raw[:, 1]
+        z_acc_raw = acc_raw[:, 2]
+        x_acc_filtered = acc_filter[:, 0]
+        y_acc_filtered = acc_filter[:, 1]
+        z_acc_filtered = acc_filter[:, 2]
+        x_acc_world = acc_world[:, 0]
+        y_acc_world = acc_world[:, 1]
+        z_acc_world = acc_world[:, 2]
+        x_vel = velocity[:, 0]
+        y_vel = velocity[:, 1]
+        z_vel = velocity[:, 2]
+        x_vel_filt = filter_vel[:, 0]
+        y_vel_filt = filter_vel[:, 1]
+        z_vel_filt = filter_vel[:, 2]
+        x_pos = position[:, 0]
+        y_pos = position[:, 1]
+        z_pos = position[:, 2]
+        x_pos_filt = filter_pos[:, 0]
+        y_pos_filt = filter_pos[:, 1]
+        z_pos_filt = filter_pos[:, 2]
+        time = df['timestamp']
 
-    x_acc_raw = acc_raw[:, 0]
-    y_acc_raw = acc_raw[:, 1]
-    z_acc_raw = acc_raw[:, 2]
-    x_acc_filtered = acc_filter[:, 0]
-    y_acc_filtered = acc_filter[:, 1]
-    z_acc_filtered = acc_filter[:, 2]
-    x_acc_world = acc_world[:, 0]
-    y_acc_world = acc_world[:, 1]
-    z_acc_world = acc_world[:, 2]
-    x_vel = velocity[:, 0]
-    y_vel = velocity[:, 1]
-    z_vel = velocity[:, 2]
-    x_vel_filt = filter_vel[:, 0]
-    y_vel_filt = filter_vel[:, 1]
-    z_vel_filt = filter_vel[:, 2]
-    x_pos = position[:, 0]
-    y_pos = position[:, 1]
-    z_pos = position[:, 2]
-    x_pos_filt = filter_pos[:, 0]
-    y_pos_filt = filter_pos[:, 1]
-    z_pos_filt = filter_pos[:, 2]
-    time = df['timestamp']
+        # Truncate the data to a specific time window for debugging
+        mask = (time > DEBUG_START_TIME) & (time < DEBUG_END_TIME)
 
-    # Truncate the data to a specific time window for debugging
-    START_TIME = 15.0
-    END_TIME = 22.0
-    mask = (time > START_TIME) & (time < END_TIME)
+        x_acc_raw = x_acc_raw[mask]
+        y_acc_raw = y_acc_raw[mask]
+        z_acc_raw = z_acc_raw[mask]
+        x_acc_filtered = x_acc_filtered[mask]
+        y_acc_filtered = y_acc_filtered[mask]
+        z_acc_filtered = z_acc_filtered[mask]
+        x_acc_world = x_acc_world[mask]
+        y_acc_world = y_acc_world[mask]
+        z_acc_world = z_acc_world[mask]
+        x_vel = x_vel[mask]
+        y_vel = y_vel[mask]
+        z_vel = z_vel[mask]
+        x_vel_filt = x_vel_filt[mask]
+        y_vel_filt = y_vel_filt[mask]
+        z_vel_filt = z_vel_filt[mask]
+        x_pos = x_pos[mask]
+        y_pos = y_pos[mask]
+        z_pos = z_pos[mask]
+        x_pos_filt = x_pos_filt[mask]
+        y_pos_filt = y_pos_filt[mask]
+        z_pos_filt = z_pos_filt[mask]
+        time = time[mask]
+        plt.figure()
+        # plt.plot(time, x_acc_raw, label='X Accel Raw')
+        # plt.plot(time, y_acc_raw, label='Y Accel Raw')
+        # plt.plot(time, z_acc_raw, label='Z Accel Raw')
 
-    x_acc_raw = x_acc_raw[mask]
-    y_acc_raw = y_acc_raw[mask]
-    z_acc_raw = z_acc_raw[mask]
-    x_acc_filtered = x_acc_filtered[mask]
-    y_acc_filtered = y_acc_filtered[mask]
-    z_acc_filtered = z_acc_filtered[mask]
-    x_acc_world = x_acc_world[mask]
-    y_acc_world = y_acc_world[mask]
-    z_acc_world = z_acc_world[mask]
-    x_vel = x_vel[mask]
-    y_vel = y_vel[mask]
-    z_vel = z_vel[mask]
-    x_vel_filt = x_vel_filt[mask]
-    y_vel_filt = y_vel_filt[mask]
-    z_vel_filt = z_vel_filt[mask]
-    x_pos = x_pos[mask]
-    y_pos = y_pos[mask]
-    z_pos = z_pos[mask]
-    x_pos_filt = x_pos_filt[mask]
-    y_pos_filt = y_pos_filt[mask]
-    z_pos_filt = z_pos_filt[mask]
-    time = time[mask]
+        # plt.plot(time, x_acc_filtered, label='X Accel Filtered')
+        # plt.plot(time, y_acc_filtered, label='Y Accel Filtered')
+        # plt.plot(time, z_acc_filtered, label='Z Accel Filtered')
 
-    plt.figure()
-    # plt.plot(time, x_acc_raw, label='X Accel Raw')
-    # plt.plot(time, y_acc_raw, label='Y Accel Raw')
-    # plt.plot(time, z_acc_raw, label='Z Accel Raw')
+        # plt.plot(time, x_acc_world, label='X Accel World')
+        # plt.plot(time, y_acc_world, label='Y Accel World')
+        # plt.plot(time, z_acc_world, label='Z Accel World')
 
-    # plt.plot(time, x_acc_filtered, label='X Accel Filtered')
-    # plt.plot(time, y_acc_filtered, label='Y Accel Filtered')
-    # plt.plot(time, z_acc_filtered, label='Z Accel Filtered')
+        # plt.plot(time, x_vel, label='X Vel')
+        # plt.plot(time, y_vel, label='Y Vel')
+        # plt.plot(time, z_vel, label='Z Vel')
 
-    # plt.plot(time, x_acc_world, label='X Accel World')
-    # plt.plot(time, y_acc_world, label='Y Accel World')
-    # plt.plot(time, z_acc_world, label='Z Accel World')
+        # plt.plot(time, x_vel_filt, label='X Vel Filtered')
+        # plt.plot(time, y_vel_filt, label='Y Vel Filtered')
+        # plt.plot(time, z_vel_filt, label='Z Vel Filtered')
 
-    # plt.plot(time, x_vel, label='X Vel')
-    # plt.plot(time, y_vel, label='Y Vel')
-    # plt.plot(time, z_vel, label='Z Vel')
+        # plt.plot(time, x_pos, label='X Pos')
+        # plt.plot(time, y_pos, label='Y Pos')
+        # plt.plot(time, z_pos, label='Z Pos')
 
-    # plt.plot(time, x_vel_filt, label='X Vel Filtered')
-    # plt.plot(time, y_vel_filt, label='Y Vel Filtered')
-    # plt.plot(time, z_vel_filt, label='Z Vel Filtered')
-
-    # plt.plot(time, x_pos, label='X Pos')
-    # plt.plot(time, y_pos, label='Y Pos')
-    # plt.plot(time, z_pos, label='Z Pos')
-
-    plt.plot(time, x_pos_filt, label='X Pos Filtered')
-    plt.plot(time, y_pos_filt, label='Y Pos Filtered')
-    plt.plot(time, z_pos_filt, label='Z Pos Filtered')
+        plt.plot(time, x_pos_filt, label='X Pos Filtered')
+        plt.plot(time, y_pos_filt, label='Y Pos Filtered')
+        plt.plot(time, z_pos_filt, label='Z Pos Filtered')
     
-    plt.xlabel("Time (s)")
-    plt.ylabel("Value")
-    plt.title("Debugging IMU Data")
-    plt.legend()
-    plt.grid(True)
-    plt.show()
+        plt.xlabel("Time (s)")
+        plt.ylabel("Value")
+        plt.title("Debugging IMU Data")
+        plt.legend()
+        plt.grid(True)
+        plt.show()
 
     # anim = animate_orientation(orientations, df['timestamp'])
     # anim.save("animation.mp4")

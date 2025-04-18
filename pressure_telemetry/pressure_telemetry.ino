@@ -1,6 +1,4 @@
 #include <Adafruit_BMP280.h>
-#include <Adafruit_ICM20649.h>
-#include <Adafruit_ICM20X.h>
 #include <SD.h>
 
 // Defining DEBUG shuts of serial monitor
@@ -34,8 +32,8 @@
 
 const int SD_CHIP_SELECT = 10;
 
-Adafruit_ICM20649 imu; // imu
-Adafruit_Sensor *imu_accel, *imu_gyro;
+Adafruit_BMP280 bmp; // barometric pressure
+Adafruit_Sensor *bmp_pressure;
 
 File log_file;
 
@@ -69,10 +67,10 @@ void open_log_file() {
   #ifdef DEBUG
   Serial.print("Opening log file... ");
   #endif
-  log_file = SD.open("datalog.txt", FILE_WRITE);
+  log_file = SD.open("bmplog.txt", FILE_WRITE);
   if (!log_file) {
     #ifdef DEBUG
-    Serial.println("Failed to open datalog.txt");
+    Serial.println("Failed to open bmplog.txt");
     #endif
     waitForever();
   }
@@ -81,23 +79,31 @@ void open_log_file() {
   #endif
 }
 
-void init_imu() {
+void init_bmp() {
   #ifdef DEBUG
-  Serial.print("Initializing IMU... ");
+  Serial.print("Initializing BMP... ");
   #endif
-
-  // open i2c comms with imu
-  if (!imu.begin_I2C()) {
+  if (!bmp.begin()) {
     #ifdef DEBUG
-    Serial.println("Failed to find IMU");
+    Serial.print("Failed to find BMP, SensorID was: 0x");
+    Serial.println(bmp.sensorID(),16);
     #endif
     waitForever();
+    // ID of 0xFF probably means a bad address, a BMP 180 or BMP 085
+    // ID of 0x56-0x58 represents a BMP 280
+    // ID of 0x60 represents a BME 280
+    // ID of 0x61 represents a BME 680
   }
 
-  imu_accel = imu.getAccelerometerSensor();
-  imu_gyro = imu.getGyroSensor();
+  bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
+                Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
+                Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
+                Adafruit_BMP280::FILTER_X16,      /* Filtering. */
+                Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+
+  bmp_pressure = bmp.getPressureSensor();
   #ifdef DEBUG
-  Serial.println("IMU success!");
+  Serial.println("BMP success!");
   #endif
 }
 
@@ -110,7 +116,7 @@ void setup() {
   Serial.println("Started serial communications");
   #endif
 
-  init_imu();
+  init_bmp();
   sd_init();
   open_log_file();
 
@@ -120,10 +126,8 @@ void setup() {
 }
 
 void loop() {  
-  // get sensor data
-  sensors_event_t accel_evt, gyro_evt;
-  imu_accel->getEvent(&accel_evt);
-  imu_gyro->getEvent(&gyro_evt);
+  sensors_event_t pressure_evt;
+  bmp_pressure->getEvent(&pressure_evt);
   
   // make a string for assembling the data to log
   // [time],[accel x],[accel y],[accel z],[gyro x],[gyro y],[gyro z]
@@ -134,28 +138,18 @@ void loop() {
   // pressure in hPa
   // altitude in meters
 
-  log_file = SD.open("datalog.txt", FILE_WRITE);
+  log_file = SD.open("bmplog.txt", FILE_WRITE);
   // if the file is available, write to it
   if (log_file) {
     log_file.print(millis());
     log_file.print(",");
-    log_file.print(accel_evt.acceleration.x);
-    log_file.print(",");
-    log_file.print(accel_evt.acceleration.y);
-    log_file.print(",");
-    log_file.print(accel_evt.acceleration.z);
-    log_file.print(",");
-    log_file.print(gyro_evt.gyro.x);
-    log_file.print(",");
-    log_file.print(gyro_evt.gyro.y);
-    log_file.print(",");
-    log_file.println(gyro_evt.gyro.z);
+    log_file.print(pressure_evt.pressure);
     log_file.close();
   }
   // if the file isn't open, pop up an error
   else {
     #ifdef DEBUG
-    Serial.println("ERROR opening datalog.txt");
+    Serial.println("ERROR opening bmplog.txt");
     #endif
   }
 }

@@ -5,3 +5,5 @@ env
 sim_data.csv
 # test data
 test_data/
+
+*.mp4

@@ -20,7 +20,7 @@ ACCEL_Z_OFFSET = 0.15
 
 ACCEL_FILTER_CUTOFF = 5  # Hz
 VEL_FILTER_CUTOFF = 10  # Hz
-POS_FILTER_CUTOFF = 1  # Hz
+POS_FILTER_CUTOFF = 10  # Hz
 
 DO_WORLD_FRAME_ROTATION = True  # Set to True to rotate the accelerometer data into the world frame
 

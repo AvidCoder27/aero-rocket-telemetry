@@ -4,7 +4,7 @@
 #include <SD.h>
 
 // Defining DEBUG shuts of serial monitor
-#define DEBUG // comment out for release
+// #define DEBUG // comment out for release
 
 /*
   SD card attached to SPI bus as follows:
@@ -41,7 +41,10 @@ File log_file;
 
 void waitForever() {
   while(1) {
-    delay(10);
+    #ifdef DEBUG
+    Serial.println("Error!");
+    #endif
+    delay(500);
   }
 }
 

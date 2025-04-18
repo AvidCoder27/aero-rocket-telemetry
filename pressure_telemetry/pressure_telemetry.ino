@@ -39,7 +39,10 @@ File log_file;
 
 void waitForever() {
   while(1) {
-    delay(10);
+    #ifdef DEBUG
+    Serial.println("Error!");
+    #endif
+    delay(500);
   }
 }
 

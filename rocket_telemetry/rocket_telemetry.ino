@@ -3,6 +3,9 @@
 #include <Adafruit_ICM20X.h>
 #include <SD.h>
 
+// Defining DEBUG shuts of serial monitor
+#define DEBUG // comment out for release
+
 /*
   SD card attached to SPI bus as follows:
   ** SDO - pin 11
@@ -43,9 +46,13 @@ void waitForever() {
 }
 
 void sd_init() {
+  #ifdef DEBUG
   Serial.print("Initializing SD card... ");
+  #endif
   if (!SD.begin(SD_CHIP_SELECT)) {
+    #ifdef DEBUG
     Serial.println("SD init failed");
+    #endif
     // Things to check:
     // 1. is a card inserted?
     // 2. is your wiring correct?
@@ -53,44 +60,62 @@ void sd_init() {
     // Note: press reset button on the board and reopen this Serial Monitor after fixing your issue!
     waitForever();
   }
+  #ifdef DEBUG
   Serial.println("SD success!");
+  #endif
 }
 
 void open_log_file() {
+  #ifdef DEBUG
   Serial.print("Opening log file... ");
+  #endif
   log_file = SD.open("datalog.txt", FILE_WRITE);
   if (!log_file) {
+    #ifdef DEBUG
     Serial.println("Failed to open datalog.txt");
+    #endif
   }
+  #ifdef DEBUG
   Serial.println("Log file opened!");
+  #endif
 }
 
 void init_imu() {
+  #ifdef DEBUG
   Serial.print("Initializing IMU... ");
+  #endif
 
   // open i2c comms with imu
   if (!imu.begin_I2C()) {
+    #ifdef DEBUG
     Serial.println("Failed to find IMU");
+    #endif
     waitForever();
   }
 
   imu_accel = imu.getAccelerometerSensor();
   imu_gyro = imu.getGyroSensor();
+  #ifdef DEBUG
   Serial.println("IMU success!");
+  #endif
 }
 
 void setup() {
+  #ifdef DEBUG
   // Open serial communications
   Serial.begin(9600);
   // wait for Serial Monitor
   while (!Serial) delay(10);
   Serial.println("Started serial communications");
+  #endif
 
   init_imu();
   sd_init();
   open_log_file();
 
+  #ifdef DEBUG
   Serial.println("Initialization complete!");
+  #endif
 }
 
 void loop() {  
@@ -107,20 +132,6 @@ void loop() {
   // gyro in rad/sec
   // pressure in hPa
   // altitude in meters
-
-  // Serial.print(millis());
-  // Serial.print(",");
-  // Serial.print(accel_evt.acceleration.x);
-  // Serial.print(",");
-  // Serial.print(accel_evt.acceleration.y);
-  // Serial.print(",");
-  // Serial.print(accel_evt.acceleration.z);
-  // Serial.print(",");
-  // Serial.print(gyro_evt.gyro.x);
-  // Serial.print(",");
-  // Serial.print(gyro_evt.gyro.y);
-  // Serial.print(",");
-  // Serial.println(gyro_evt.gyro.z);
 
   log_file = SD.open("datalog.txt", FILE_WRITE);
   // if the file is available, write to it
@@ -142,6 +153,8 @@ void loop() {
   }
   // if the file isn't open, pop up an error
   else {
+    #ifdef DEBUG
     Serial.println("ERROR opening datalog.txt");
+    #endif
   }
 }

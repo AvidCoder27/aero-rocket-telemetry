@@ -5,7 +5,7 @@
 #include <Wire.h>
 
 // Defining DEBUG shuts of serial monitor
-// #define DEBUG // comment out for release
+#define DEBUG // comment out for release
 
 /*
   SD card attached to SPI bus as follows:
@@ -35,23 +35,39 @@
 
 #define SD_CHIP_SELECT 10
 
+#ifdef DEBUG
+const char* str_init = "init";
+const char* str_imu = "IMU";
+const char* str_bmp = "BMP";
+const char* str_sd = "SD";
+const char* BAD = "bad!";
+const char* GOOD = "good";
+const char* DOTS = "...";
+const char SPACE = ' ';
+#endif
+const char* FILE_NAME = "DATALOG.TXT";
+const char COMMA = ',';
+
 File log_file;
 
 Adafruit_ICM20649 imu; // imu
 Adafruit_Sensor *imu_accel, *imu_gyro;
 
-Adafruit_BMP280 bmp; // barometric pressure
+Adafruit_BMP280 bmp(&Wire); // barometric pressure
 Adafruit_Sensor *bmp_pressure;
 
 void init_imu() {
   #ifdef DEBUG
-  Serial.print("Initializing IMU... ");
+  Serial.print(str_init);
+  Serial.print(SPACE);
+  Serial.print(str_imu);
+  Serial.print(DOTS);
   #endif
 
   // open i2c comms with imu
   if (!imu.begin_I2C()) {
     #ifdef DEBUG
-    Serial.println("Failed to find IMU");
+    Serial.println(BAD);
     #endif
     waitForever();
   }
@@ -59,17 +75,22 @@ void init_imu() {
   imu_accel = imu.getAccelerometerSensor();
   imu_gyro = imu.getGyroSensor();
   #ifdef DEBUG
-  Serial.println("IMU success!");
+  Serial.println(GOOD);
   #endif
 }
 
 void init_bmp() {
   #ifdef DEBUG
-  Serial.print("Initializing BMP... ");
+  Serial.print(str_init);
+  Serial.print(SPACE);
+  Serial.print(str_bmp);
+  Serial.print(DOTS);
   #endif
+
   if (!bmp.begin()) {
     #ifdef DEBUG
-    Serial.print("Failed to find BMP, SensorID was: 0x");
+    Serial.print(BAD);
+    Serial.print(SPACE);
     Serial.println(bmp.sensorID(),16);
     #endif
     waitForever();
@@ -82,19 +103,19 @@ void init_bmp() {
   bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
                 Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
                 Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
-                Adafruit_BMP280::FILTER_X16,      /* Filtering. */
-                Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+                Adafruit_BMP280::FILTER_OFF,      /* Filtering. */
+                Adafruit_BMP280::STANDBY_MS_125); /* Standby time. */
 
   bmp_pressure = bmp.getPressureSensor();
   #ifdef DEBUG
-  Serial.println("BMP success!");
+  Serial.println(GOOD);
   #endif
 }
 
 void waitForever() {
   while(1) {
     #ifdef DEBUG
-    Serial.println("Error!");
+    Serial.println(BAD);
     #endif
     delay(500);
   }
@@ -102,11 +123,14 @@ void waitForever() {
 
 void sd_init() {
   #ifdef DEBUG
-  Serial.print("Initializing SD card... ");
+  Serial.print(str_init);
+  Serial.print(SPACE);
+  Serial.print(str_sd);
+  Serial.print(DOTS);
   #endif
   if (!SD.begin(SD_CHIP_SELECT)) {
     #ifdef DEBUG
-    Serial.println("SD init failed");
+    Serial.println(BAD);
     #endif
     // Things to check:
     // 1. is a card inserted?
@@ -116,24 +140,29 @@ void sd_init() {
     waitForever();
   }
   #ifdef DEBUG
-  Serial.println("SD success!");
+  Serial.println(GOOD);
   #endif
 }
 
 void open_log_file() {
   #ifdef DEBUG
-  Serial.print("Opening log file... ");
+  Serial.print(str_init);
+  Serial.print(SPACE);
+  Serial.print(FILE_NAME);
+  Serial.print(DOTS);
+  
   #endif
-  log_file = SD.open("datalog.txt", FILE_WRITE);
+  log_file = SD.open(FILE_NAME, FILE_WRITE);
   if (!log_file) {
     #ifdef DEBUG
-    Serial.println("Failed to open datalog.txt");
+    Serial.println(BAD);
     #endif
     waitForever();
   }
   #ifdef DEBUG
-  Serial.println("Log file opened!");
+  Serial.println(GOOD);
   #endif
+  log_file.close();
 }
 
 void setup() {
@@ -142,20 +171,22 @@ void setup() {
   Serial.begin(9600);
   // wait for Serial Monitor
   while (!Serial) delay(10);
-  Serial.println("Started serial communications");
+  Serial.println(str_init);
   #endif
 
-  init_imu();
-  init_bmp();
   sd_init();
   open_log_file();
+  init_imu();
+  init_bmp();
 
   #ifdef DEBUG
-  Serial.println("Initialization complete!");
+  Serial.print(str_init);
+  Serial.print(SPACE);
+  Serial.println(GOOD);
   #endif
 }
 
-void loop() {  
+void loop() {
   // get sensor data
   sensors_event_t accel_evt, gyro_evt, pressure_evt;
   bmp_pressure->getEvent(&pressure_evt);
@@ -171,25 +202,25 @@ void loop() {
   // pressure in hPa
   // altitude in meters
 
-  log_file = SD.open("datalog.txt", FILE_WRITE);
+  log_file = SD.open(FILE_NAME, FILE_WRITE);
   // if the file is available, write to it
   if (log_file) {
     log_file.print(millis());
-    log_file.print(",");
+    log_file.print(COMMA);
     log_file.print(accel_evt.acceleration.x);
-    log_file.print(",");
+    log_file.print(COMMA);
     log_file.print(accel_evt.acceleration.y);
-    log_file.print(",");
+    log_file.print(COMMA);
     log_file.print(accel_evt.acceleration.z);
-    log_file.print(",");
+    log_file.print(COMMA);
     log_file.print(gyro_evt.gyro.x);
-    log_file.print(",");
+    log_file.print(COMMA);
     log_file.print(gyro_evt.gyro.y);
-    log_file.print(",");
+    log_file.print(COMMA);
     log_file.print(gyro_evt.gyro.z);
-    log_file.print(",");
+    log_file.print(COMMA);
     log_file.print(pressure_evt.pressure);
-    log_file.print(",");
+    log_file.print(COMMA);
     log_file.print(pressure_evt.temperature);
     log_file.println();
     log_file.close();
@@ -197,7 +228,9 @@ void loop() {
   // if the file isn't open, pop up an error
   else {
     #ifdef DEBUG
-    Serial.println("ERROR opening datalog.txt");
+    Serial.print(BAD);
+    Serial.print(SPACE);
+    Serial.println(FILE_NAME);
     #endif
   }
 }

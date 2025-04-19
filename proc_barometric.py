@@ -137,16 +137,16 @@ def main():
     print(f"Station pressure: {station_pressure:.2f} Pa, Temperature: {station_temp:.2f} K, Dew Point: {station_dew_point:.2f} °C, Virtual Temp: {virtual_temp:.2f} K")
 
     # Calculate altitude using barometric formula
-    df['altitude'] = calculate_altitude(df['pressure'].values, pressure_at_sea=station_pressure, temp_at_sea=virtual_temp)
+    altitude = calculate_altitude(df['pressure'].values, pressure_at_sea=station_pressure, temp_at_sea=virtual_temp)
 
     # Print some stats
-    print(f"Min altitude: {df['altitude'].min():.2f} m")
-    print(f"Max altitude: {df['altitude'].max():.2f} m")
-    print(f"Delta altitude: {df['altitude'].max() - df['altitude'].min():.2f} m")
+    print(f"Min altitude: {altitude.min():.2f} m")
+    print(f"Max altitude: {altitude.max():.2f} m")
+    print(f"Delta altitude: {altitude.max() - altitude.min():.2f} m")
 
     # Plot the data
     plt.figure(figsize=(10, 6))
-    plt.plot(df['timestamp'], df['altitude'])
+    plt.plot(df['timestamp'], altitude)
     plt.xlabel('Time (s)')
     plt.ylabel('Altitude (m)')
     plt.title('Altitude vs Time')

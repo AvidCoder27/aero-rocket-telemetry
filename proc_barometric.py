@@ -1,5 +1,6 @@
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 import requests
 import re
 from datetime import datetime
@@ -8,6 +9,18 @@ from zoneinfo import ZoneInfo
 # Log file name:
 LOG_DIR = "test_data_pressure/"
 LOG_FILE = "bmp_4_bigger.csv"
+
+def load_data(filename):
+    df = pd.read_csv(filename, header=None)
+    df.columns = ['timestamp', 'pressure', 'temperature']
+    df['timestamp'] = df['timestamp'] * 1e-3  # Convert ms to seconds
+    df['pressure'] = df['pressure'] * 100 # Convert hPa to Pa
+    df['temperature'] = df['temperature'] + 273.15 # Convert to Kelvin
+
+    df = df.sort_values(by='timestamp')
+    df['timestamp'] = df['timestamp'] - df['timestamp'].iloc[0]  # start at 0
+    df['dt'] = df['timestamp'].diff().fillna(0)
+    return df
 
 def format_metar_time_eastern(year: int, month: int, day: int, hour: int, minute: int):
     """
@@ -21,9 +34,8 @@ def format_metar_time_eastern(year: int, month: int, day: int, hour: int, minute
 
 def fetch_metar_pressure_temp(icao_code: str, date_time_utc: str = None):
     """
-    Fetch METAR data from NOAA for a given ICAO station code.
-    Optionally provide a UTC datetime string in format 'YYYYMMDDTHH:MMZ' to get past data.
-    Returns: sea-level pressure (Pa), temperature (K)
+    Fetch METAR data from NOAA for a given ICAO station code and date/time.
+    Returns: sea-level pressure (Pa), temperature (K), dew point (Celsius)
     """
     base_url = "https://aviationweather.gov/api/data/metar"
     params = {
@@ -41,49 +53,74 @@ def fetch_metar_pressure_temp(icao_code: str, date_time_utc: str = None):
     metar = response.text.strip().splitlines()[0]
     print(f"Fetched METAR: {metar}")
 
-    # Extract temperature (e.g., 16/07 or M01/M02)
+    # Extract temperature and dew point
+    # Temperature and Dew Point: (e.g., 16/07, 15/M03)
     temp_match = re.search(r'(\s|-)(M?\d{2})/(M?\d{2})', metar)
     if temp_match:
         temp_c = int(temp_match.group(2).replace('M', '-'))
+        dew_point_c = int(temp_match.group(3).replace('M', '-'))
     else:
-        raise ValueError("Temperature not found in METAR")
+        raise ValueError("Temperature and dew point not found in METAR")
 
-    # Extract altimeter (e.g., A3011)
+    # Extract altimeter setting (e.g., A3011)
     altimeter_match = re.search(r'\sA(\d{4})', metar)
     if altimeter_match:
         altimeter_inHg = int(altimeter_match.group(1)) / 100
-        pressure_pa = altimeter_inHg * 3386.389
+        pressure_pa = altimeter_inHg * 3386.389  # Convert to Pa
     else:
         raise ValueError("Altimeter setting not found in METAR")
 
     temp_k = temp_c + 273.15
-    return pressure_pa, temp_k
+    return pressure_pa, temp_k, dew_point_c
 
-def load_data(filename):
-    df = pd.read_csv(filename, header=None)
-    df.columns = ['timestamp', 'pressure', 'temperature']
-    df['timestamp'] = df['timestamp'] * 1e-3  # Convert ms to seconds
-    df['pressure'] = df['pressure'] * 100 # Convert hPa to Pa
-    df['temperature'] = df['temperature'] + 273.15 # Convert to Kelvin
+def calculate_virtual_temperature(temp_k: float, dew_point_c: float, pressure_pa: float):
+    """
+    Calculates the virtual temperature accounting for humidity.
+    - temp_k: actual temperature (Kelvin)
+    - dew_point_c: dew point (Celsius)
+    - pressure_pa: pressure in Pascals
 
-    df = df.sort_values(by='timestamp')
-    df['timestamp'] = df['timestamp'] - df['timestamp'].iloc[0]  # start at 0
-    df['dt'] = df['timestamp'].diff().fillna(0)
-    return df
+    Returns:
+        Virtual temperature (Kelvin)
+    """
+    # Convert dew point to vapor pressure (e) in hPa
+    e = 6.112 * np.exp((17.67 * dew_point_c) / (dew_point_c + 243.5))  # hPa
+
+    # Convert pressure to hPa
+    pressure_hpa = pressure_pa / 100.0
+
+    # Virtual temp correction
+    Tv = temp_k * (1 + 0.61 * (e / pressure_hpa))
+
+    return Tv
 
 def calculate_altitude(pressures, pressure_at_sea: float, temp_at_sea: float):
     """
-    Calculate the altitude based on the pressure and temperature at sea level.
-    Pressure is in Pa, temperature is in Kelvin.
+    Calculates altitude from pressure readings using the barometric formula.
+    - pressures: array of pressure values (Pa)
+    - pressure_at_sea: reference sea-level pressure (Pa)
+    - temp_at_sea: temperature at sea level (K)
+    
+    Returns:
+        altitudes: array of altitude estimates (m)
     """
-    # Scroll down to see the formula: (https://www.mide.com/air-pressure-at-altitude-calculator)
+    # Constants
+    LAPSE_RATE = 0.0065  # K/m (positive for math)
+    GAS_CONSTANT = 8.31432  # J/(mol*K)
+    MOLAR_MASS = 0.0289644  # kg/mol
+    GRAVITY = 9.80665  # m/s²
 
-    LAPSE_RATE = -0.0065  # Kelvin/meter
-    UNIVERSAL_GAS_CONSTANT = 8.31432  # N*m/(mol*K)
-    MOLAR_MASS_AIR = 0.0289644  # kg/mol
-    GRAVITY = 9.80665  # m/s^2
-    hb = 0  # "height at the bottom of atmospheric layer [m]"
-    altitudes = hb + temp_at_sea / LAPSE_RATE * ((pressures / pressure_at_sea) ** (-UNIVERSAL_GAS_CONSTANT * LAPSE_RATE / GRAVITY / MOLAR_MASS_AIR) - 1)
+    exponent = (GAS_CONSTANT * LAPSE_RATE) / (GRAVITY * MOLAR_MASS)
+
+    # Ensure numpy array
+    pressures = np.asarray(pressures)
+
+    # Prevent divide-by-zero or negative pressures
+    pressures = np.clip(pressures, 1, None)
+
+    # Barometric formula with lapse rate
+    altitudes = (temp_at_sea / LAPSE_RATE) * (1 - (pressures / pressure_at_sea) ** exponent)
+
     return altitudes
 
 def main():
@@ -95,11 +132,12 @@ def main():
     icao_code = "KBWI"
     observation_time = format_metar_time_eastern(year=2025, month=4, day=18, hour=20, minute=30)
 
-    station_pressure, station_temp = fetch_metar_pressure_temp(icao_code, observation_time)
-    print(f"Station pressure: {station_pressure:.2f} Pa, Temperature: {station_temp:.2f} K")
+    station_pressure, station_temp, station_dew_point = fetch_metar_pressure_temp(icao_code, observation_time)
+    virtual_temp = calculate_virtual_temperature(station_temp, station_dew_point, station_pressure)
+    print(f"Station pressure: {station_pressure:.2f} Pa, Temperature: {station_temp:.2f} K, Dew Point: {station_dew_point:.2f} °C, Virtual Temp: {virtual_temp:.2f} K")
 
     # Calculate altitude using barometric formula
-    df['altitude'] = calculate_altitude(df['pressure'].values, pressure_at_sea=station_pressure, temp_at_sea=station_temp)
+    df['altitude'] = calculate_altitude(df['pressure'].values, pressure_at_sea=station_pressure, temp_at_sea=virtual_temp)
 
     # Print some stats
     print(f"Min altitude: {df['altitude'].min():.2f} m")

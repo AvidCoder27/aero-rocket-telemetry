@@ -2,6 +2,7 @@
 #include <Adafruit_ICM20649.h>
 #include <Adafruit_ICM20X.h>
 #include <SD.h>
+#include <Wire.h>
 
 // Defining DEBUG shuts of serial monitor
 // #define DEBUG // comment out for release
@@ -32,12 +33,63 @@
   Both i2c devices connect to that on their data pin.
 */
 
-const int SD_CHIP_SELECT = 10;
+#define SD_CHIP_SELECT 10
+
+File log_file;
 
 Adafruit_ICM20649 imu; // imu
 Adafruit_Sensor *imu_accel, *imu_gyro;
 
-File log_file;
+Adafruit_BMP280 bmp; // barometric pressure
+Adafruit_Sensor *bmp_pressure;
+
+void init_imu() {
+  #ifdef DEBUG
+  Serial.print("Initializing IMU... ");
+  #endif
+
+  // open i2c comms with imu
+  if (!imu.begin_I2C()) {
+    #ifdef DEBUG
+    Serial.println("Failed to find IMU");
+    #endif
+    waitForever();
+  }
+
+  imu_accel = imu.getAccelerometerSensor();
+  imu_gyro = imu.getGyroSensor();
+  #ifdef DEBUG
+  Serial.println("IMU success!");
+  #endif
+}
+
+void init_bmp() {
+  #ifdef DEBUG
+  Serial.print("Initializing BMP... ");
+  #endif
+  if (!bmp.begin()) {
+    #ifdef DEBUG
+    Serial.print("Failed to find BMP, SensorID was: 0x");
+    Serial.println(bmp.sensorID(),16);
+    #endif
+    waitForever();
+    // ID of 0xFF probably means a bad address, a BMP 180 or BMP 085
+    // ID of 0x56-0x58 represents a BMP 280
+    // ID of 0x60 represents a BME 280
+    // ID of 0x61 represents a BME 680
+  }
+
+  bmp.setSampling(Adafruit_BMP280::MODE_NORMAL,     /* Operating Mode. */
+                Adafruit_BMP280::SAMPLING_X2,     /* Temp. oversampling */
+                Adafruit_BMP280::SAMPLING_X16,    /* Pressure oversampling */
+                Adafruit_BMP280::FILTER_X16,      /* Filtering. */
+                Adafruit_BMP280::STANDBY_MS_500); /* Standby time. */
+
+  bmp_pressure = bmp.getPressureSensor();
+  #ifdef DEBUG
+  Serial.println("BMP success!");
+  #endif
+}
 
 void waitForever() {
   while(1) {
@@ -84,26 +136,6 @@ void open_log_file() {
   #endif
 }
 
-void init_imu() {
-  #ifdef DEBUG
-  Serial.print("Initializing IMU... ");
-  #endif
-
-  // open i2c comms with imu
-  if (!imu.begin_I2C()) {
-    #ifdef DEBUG
-    Serial.println("Failed to find IMU");
-    #endif
-    waitForever();
-  }
-
-  imu_accel = imu.getAccelerometerSensor();
-  imu_gyro = imu.getGyroSensor();
-  #ifdef DEBUG
-  Serial.println("IMU success!");
-  #endif
-}
-
 void setup() {
   #ifdef DEBUG
   // Open serial communications
@@ -114,6 +146,7 @@ void setup() {
   #endif
 
   init_imu();
+  init_bmp();
   sd_init();
   open_log_file();
 
@@ -124,7 +157,8 @@ void setup() {
 
 void loop() {  
   // get sensor data
-  sensors_event_t accel_evt, gyro_evt;
+  sensors_event_t accel_evt, gyro_evt, pressure_evt;
+  bmp_pressure->getEvent(&pressure_evt);
   imu_accel->getEvent(&accel_evt);
   imu_gyro->getEvent(&gyro_evt);
   
@@ -152,7 +186,12 @@ void loop() {
     log_file.print(",");
     log_file.print(gyro_evt.gyro.y);
     log_file.print(",");
-    log_file.println(gyro_evt.gyro.z);
+    log_file.print(gyro_evt.gyro.z);
+    log_file.print(",");
+    log_file.print(pressure_evt.pressure);
+    log_file.print(",");
+    log_file.print(pressure_evt.temperature);
+    log_file.println();
     log_file.close();
   }
   // if the file isn't open, pop up an error

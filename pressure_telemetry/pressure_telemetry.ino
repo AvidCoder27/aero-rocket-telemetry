@@ -140,13 +140,16 @@ void loop() {
   // gyro in rad/sec
   // pressure in hPa
   // altitude in meters
+  // temperature in Celsius
 
   log_file = SD.open("bmplog.txt", FILE_WRITE);
   // if the file is available, write to it
   if (log_file) {
     log_file.print(millis());
     log_file.print(",");
-    log_file.println(pressure_evt.pressure);
+    log_file.print(pressure_evt.pressure);
+    log_file.print(",");
+    log_file.println(pressure_evt.temperature);
     log_file.close();
     #ifdef DEBUG
     Serial.println(pressure_evt.pressure);

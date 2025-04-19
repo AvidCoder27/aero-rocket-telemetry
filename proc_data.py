@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib
 from scipy.integrate import cumulative_trapezoid
 from scipy.spatial.transform import Rotation as R
 from matplotlib.animation import FuncAnimation
@@ -28,7 +27,7 @@ VEL_LOW_CUT = 0.1  # Hz
 POS_LOW_CUT = 0.1  # Hz
 
 DO_WORLD_FRAME_ROTATION = True  # Set to True to rotate the accelerometer data into the world frame
-DISPLAY_DEBUG = False  # Set to True to display debug plots
+DISPLAY_DEBUG = True  # Set to True to display debug plots
 DEBUG_START_TIME = 0
 DEBUG_END_TIME = 100
 
@@ -331,21 +330,21 @@ def main():
         # plt.plot(time, y_acc_world, label='Y Accel World')
         # plt.plot(time, z_acc_world, label='Z Accel World')
 
-        # plt.plot(time, x_vel, label='X Vel')
-        # plt.plot(time, y_vel, label='Y Vel')
-        # plt.plot(time, z_vel, label='Z Vel')
+        plt.plot(time, x_vel, label='X Vel')
+        plt.plot(time, y_vel, label='Y Vel')
+        plt.plot(time, z_vel, label='Z Vel')
 
-        # plt.plot(time, x_vel_filt, label='X Vel Filtered')
-        # plt.plot(time, y_vel_filt, label='Y Vel Filtered')
-        # plt.plot(time, z_vel_filt, label='Z Vel Filtered')
+        plt.plot(time, x_vel_filt, label='X Vel Filtered')
+        plt.plot(time, y_vel_filt, label='Y Vel Filtered')
+        plt.plot(time, z_vel_filt, label='Z Vel Filtered')
 
         # plt.plot(time, x_pos, label='X Pos')
         # plt.plot(time, y_pos, label='Y Pos')
         # plt.plot(time, z_pos, label='Z Pos')
 
-        plt.plot(time, x_pos_filt, label='X Pos Filtered')
-        plt.plot(time, y_pos_filt, label='Y Pos Filtered')
-        plt.plot(time, z_pos_filt, label='Z Pos Filtered')
+        # plt.plot(time, x_pos_filt, label='X Pos Filtered')
+        # plt.plot(time, y_pos_filt, label='Y Pos Filtered')
+        # plt.plot(time, z_pos_filt, label='Z Pos Filtered')
     
         plt.xlabel("Time (s)")
         plt.ylabel("Value")

@@ -5,7 +5,7 @@
 #include <Wire.h>
 
 // Defining DEBUG shuts of serial monitor
-#define DEBUG // comment out for release
+// #define DEBUG // comment out for release
 
 /*
   SD card attached to SPI bus as follows:
@@ -54,7 +54,7 @@ Adafruit_ICM20649 imu; // imu
 Adafruit_Sensor *imu_accel, *imu_gyro;
 
 Adafruit_BMP280 bmp(&Wire); // barometric pressure
-Adafruit_Sensor *bmp_pressure;
+Adafruit_Sensor *bmp_pressure, *bmp_temperature;
 
 void init_imu() {
   #ifdef DEBUG
@@ -107,6 +107,7 @@ void init_bmp() {
                 Adafruit_BMP280::STANDBY_MS_125); /* Standby time. */
 
   bmp_pressure = bmp.getPressureSensor();
+  bmp_temperature = bmp.getTemperatureSensor();
   #ifdef DEBUG
   Serial.println(GOOD);
   #endif
@@ -188,7 +189,8 @@ void setup() {
 
 void loop() {
   // get sensor data
-  sensors_event_t accel_evt, gyro_evt, pressure_evt;
+  sensors_event_t accel_evt, gyro_evt, pressure_evt, temp_evt;
+  bmp_temperature->getEvent(&temp_evt);
   bmp_pressure->getEvent(&pressure_evt);
   imu_accel->getEvent(&accel_evt);
   imu_gyro->getEvent(&gyro_evt);
@@ -221,7 +223,7 @@ void loop() {
     log_file.print(COMMA);
     log_file.print(pressure_evt.pressure);
     log_file.print(COMMA);
-    log_file.print(pressure_evt.temperature);
+    log_file.print(temp_evt.temperature);
     log_file.println();
     log_file.close();
   }

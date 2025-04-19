@@ -9,10 +9,10 @@
 
 /*
   SD card attached to SPI bus as follows:
-  ** SDO - pin 11
-  ** SDI - pin 12
-  ** CLK - pin 13 (SCK)
   ** CS  - pin 10
+  ** SDI - pin 11
+  ** SDO - pin 12
+  ** CLK - pin 13 (SCK)
 
   IMU pinout: (https://learn.adafruit.com/adafruit-icm20649-wide-range-6-dof-imu-accelerometer-and-gyro/pinouts)
   default i2c address at 0x68 (adafruit lib handles it)

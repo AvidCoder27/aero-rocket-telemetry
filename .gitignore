@@ -1,10 +1,9 @@
 # environment stuff
 .envrc
 env
-# simulated and fake data
-sim_data.csv
+
 # test data
 test_data/
-test_data_pressure/
 
+# animation files
 *.mp4

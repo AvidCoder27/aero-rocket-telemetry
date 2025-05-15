@@ -32,7 +32,7 @@ ACCEL_Y_OFFSET = -0.30
 ACCEL_Z_OFFSET = 0.15
 
 # Filter out frequencies above these values
-ACCEL_HIGH_CUT = 8  # Hz
+ACCEL_HIGH_CUT = 15  # Hz
 VEL_HIGH_CUT = 3  # Hz
 POS_HIGH_CUT = 2  # Hz
 
@@ -41,9 +41,9 @@ VEL_LOW_CUT = 0.1  # Hz
 POS_LOW_CUT = 0.1  # Hz
 
 DO_WORLD_FRAME_ROTATION = True  # Set to True to rotate the accelerometer data into the world frame
+WINDOW_START = 197
+WINDOW_END = 220
 DISPLAY_DEBUG = True  # Set to True to display debug plots
-DEBUG_START_TIME = 0
-DEBUG_END_TIME = 100
 
 def load_data(filename):
     df = pd.read_csv(filename, header=None)
@@ -54,6 +54,12 @@ def load_data(filename):
     df = df.sort_values(by='timestamp')
     df['timestamp'] = df['timestamp'] - df['timestamp'].iloc[0]  # Start time at 0
     df['dt'] = df['timestamp'].diff().fillna(0) # Calculate delta times
+    
+    # mask the raw data with the window
+    time = df['timestamp']
+    mask = (time > WINDOW_START) & (time < WINDOW_END)
+    df = df[mask].reset_index(drop=True)
+
     return df
 
 def format_metar_time_eastern(year: int, month: int, day: int, hour: int, minute: int):
@@ -199,14 +205,17 @@ def integrate_motion(df):
     filter_acc_z = lowpass_filter(acc_body[:, 2], fs, highcut=ACCEL_HIGH_CUT)
     # recombine the dims after filtering
     filter_acc = np.column_stack((filter_acc_x, filter_acc_y, filter_acc_z))
+    
+    # ! reset the filtering on accel
+    filter_acc = acc_body.copy()
 
     # Rotate the filtered accelerations into the world frame
     if DO_WORLD_FRAME_ROTATION:
         acc_world = np.array([orient.apply(acc) for orient, acc in zip(orientations, filter_acc)])
     else:
         acc_world = filter_acc.copy()
-    # Subtract gravity from world frame Z
-    acc_world[:, 2] -= 9.81
+    # Subtract gravity from world frame X
+    acc_world[:, 0] += 9.81
 
     # Integrate acceleration to velocity and position
     velocity = cumulative_trapezoid(acc_world, timestamp, initial=0, axis=0)
@@ -393,6 +402,7 @@ def main():
 
     # plot_acceleration_fft(df)
     acc_raw, gyro, orientations, acc_filter, acc_world, velocity, filter_vel, position, filter_pos = integrate_motion(df)
+    euler_angles = [orient.as_euler('xyz', degrees=True) / 10 for orient in orientations]  # Returns angles in degrees
 
     if DISPLAY_DEBUG:
         x_acc_raw = acc_raw[:, 0]
@@ -418,31 +428,6 @@ def main():
         z_pos_filt = filter_pos[:, 2]
         time = df['timestamp']
 
-        # Truncate the data to a specific time window for debugging
-        mask = (time > DEBUG_START_TIME) & (time < DEBUG_END_TIME)
-
-        x_acc_raw = x_acc_raw[mask]
-        y_acc_raw = y_acc_raw[mask]
-        z_acc_raw = z_acc_raw[mask]
-        x_acc_filtered = x_acc_filtered[mask]
-        y_acc_filtered = y_acc_filtered[mask]
-        z_acc_filtered = z_acc_filtered[mask]
-        x_acc_world = x_acc_world[mask]
-        y_acc_world = y_acc_world[mask]
-        z_acc_world = z_acc_world[mask]
-        x_vel = x_vel[mask]
-        y_vel = y_vel[mask]
-        z_vel = z_vel[mask]
-        x_vel_filt = x_vel_filt[mask]
-        y_vel_filt = y_vel_filt[mask]
-        z_vel_filt = z_vel_filt[mask]
-        x_pos = x_pos[mask]
-        y_pos = y_pos[mask]
-        z_pos = z_pos[mask]
-        x_pos_filt = x_pos_filt[mask]
-        y_pos_filt = y_pos_filt[mask]
-        z_pos_filt = z_pos_filt[mask]
-        time = time[mask]
         plt.figure()
         # plt.plot(time, x_acc_raw, label='X Accel Raw')
         # plt.plot(time, y_acc_raw, label='Y Accel Raw')
@@ -452,17 +437,17 @@ def main():
         # plt.plot(time, y_acc_filtered, label='Y Accel Filtered')
         # plt.plot(time, z_acc_filtered, label='Z Accel Filtered')
 
-        # plt.plot(time, x_acc_world, label='X Accel World')
-        # plt.plot(time, y_acc_world, label='Y Accel World')
-        # plt.plot(time, z_acc_world, label='Z Accel World')
+        plt.plot(time, x_acc_world, label='X Accel World')
+        plt.plot(time, y_acc_world, label='Y Accel World')
+        plt.plot(time, z_acc_world, label='Z Accel World')
 
-        plt.plot(time, x_vel, label='X Vel')
-        plt.plot(time, y_vel, label='Y Vel')
-        plt.plot(time, z_vel, label='Z Vel')
+        # plt.plot(time, x_vel, label='X Vel')
+        # plt.plot(time, y_vel, label='Y Vel')
+        # plt.plot(time, z_vel, label='Z Vel')
 
-        plt.plot(time, x_vel_filt, label='X Vel Filtered')
-        plt.plot(time, y_vel_filt, label='Y Vel Filtered')
-        plt.plot(time, z_vel_filt, label='Z Vel Filtered')
+        # plt.plot(time, x_vel_filt, label='X Vel Filtered')
+        # plt.plot(time, y_vel_filt, label='Y Vel Filtered')
+        # plt.plot(time, z_vel_filt, label='Z Vel Filtered')
 
         # plt.plot(time, x_pos, label='X Pos')
         # plt.plot(time, y_pos, label='Y Pos')
@@ -473,6 +458,8 @@ def main():
         # plt.plot(time, z_pos_filt, label='Z Pos Filtered')
 
         # plt.plot(time, altitude, label='Altitude')
+
+        plt.plot(time, euler_angles, label='Orientations')
     
         plt.xlabel("Time (s)")
         plt.ylabel("Value")
@@ -483,7 +470,7 @@ def main():
 
     # anim = animate_orientation(orientations, df['timestamp'])
     # anim.save("animation.mp4")
-    plot_flight_path(filter_pos)
+    # plot_flight_path(filter_pos)
 
 if __name__ == '__main__':
     main()

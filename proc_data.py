@@ -18,7 +18,7 @@ MINUTE = 30
 
 # Log file name:
 LOG_DIR = "flight_data/"
-LOG_FILE = "flight_1.csv"
+LOG_FILE = "may_15_third_water.csv"
 
 # Constants for sensor offsets
 # These values are determined emprically

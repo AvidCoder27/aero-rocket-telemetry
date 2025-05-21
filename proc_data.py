@@ -41,9 +41,16 @@ VEL_LOW_CUT = 0.1  # Hz
 POS_LOW_CUT = 0.1  # Hz
 
 DO_WORLD_FRAME_ROTATION = True  # Set to True to rotate the accelerometer data into the world frame
-WINDOW_START = 197
-WINDOW_END = 220
+WINDOW_START = 208
+WINDOW_END = 216
 DISPLAY_DEBUG = True  # Set to True to display debug plots
+SUBTRACT_GRAVITY = True  # Set to True to subtract gravity from the world-frame accelerometer data
+
+LANDING_TIME = 214.8 # seconds
+FLIGHT_TIME = 5.3 # seconds, by video (approx.)
+FLIP_TIME = 211 # seconds, from data
+LAUNCH_TIME = LANDING_TIME - FLIGHT_TIME
+HALF_TIME = LAUNCH_TIME + (FLIGHT_TIME / 2)
 
 def load_data(filename):
     df = pd.read_csv(filename, header=None)
@@ -215,7 +222,9 @@ def integrate_motion(df):
     else:
         acc_world = filter_acc.copy()
     # Subtract gravity from world frame X
-    acc_world[:, 0] += 9.81
+    if SUBTRACT_GRAVITY:
+        acc_world[:, 0] += 9.81
+        
 
     # Integrate acceleration to velocity and position
     velocity = cumulative_trapezoid(acc_world, timestamp, initial=0, axis=0)
@@ -377,20 +386,20 @@ def main():
     df = load_data(filename)
 
     # ICAO code for Baltimore
-    icao_code = "KBWI"
-    observation_time = format_metar_time_eastern(year=2025, month=MONTH, day=DAY, hour=HOUR, minute=MINUTE)
+    # icao_code = "KBWI"
+    # observation_time = format_metar_time_eastern(year=2025, month=MONTH, day=DAY, hour=HOUR, minute=MINUTE)
    
-    station_pressure, station_temp, station_dew_point = fetch_metar_pressure_temp(icao_code, observation_time)
-    virtual_temp = calculate_virtual_temperature(station_temp, station_dew_point, station_pressure)
-    print(f"Station pressure: {station_pressure:.2f} Pa, Temperature: {station_temp:.2f} K, Dew Point: {station_dew_point:.2f} °C, Virtual Temp: {virtual_temp:.2f} K")
+    # station_pressure, station_temp, station_dew_point = fetch_metar_pressure_temp(icao_code, observation_time)
+    # virtual_temp = calculate_virtual_temperature(station_temp, station_dew_point, station_pressure)
+    # print(f"Station pressure: {station_pressure:.2f} Pa, Temperature: {station_temp:.2f} K, Dew Point: {station_dew_point:.2f} °C, Virtual Temp: {virtual_temp:.2f} K")
 
-    # Calculate altitude using barometric formula
-    altitude = calculate_altitude(df['pressure'].values, pressure_at_sea=station_pressure, temp_at_sea=virtual_temp)
+    # # Calculate altitude using barometric formula
+    # altitude = calculate_altitude(df['pressure'].values, pressure_at_sea=station_pressure, temp_at_sea=virtual_temp)
 
-    # Print some stats
-    print(f"Min altitude: {altitude.min():.2f} m")
-    print(f"Max altitude: {altitude.max():.2f} m")
-    print(f"Delta altitude: {altitude.max() - altitude.min():.2f} m")
+    # # Print some stats
+    # print(f"Min altitude: {altitude.min():.2f} m")
+    # print(f"Max altitude: {altitude.max():.2f} m")
+    # print(f"Delta altitude: {altitude.max() - altitude.min():.2f} m")
 
     print("===========Gyro Stuff===========")
     # print out filtering high and low cut off frequencies
@@ -402,7 +411,8 @@ def main():
 
     # plot_acceleration_fft(df)
     acc_raw, gyro, orientations, acc_filter, acc_world, velocity, filter_vel, position, filter_pos = integrate_motion(df)
-    euler_angles = [orient.as_euler('xyz', degrees=True) / 10 for orient in orientations]  # Returns angles in degrees
+    euler_angles = [orient.as_euler('xyz', degrees=False) for orient in orientations]  # Returns angles in degrees
+    euler_angles = np.array(euler_angles)
 
     if DISPLAY_DEBUG:
         x_acc_raw = acc_raw[:, 0]
@@ -428,7 +438,16 @@ def main():
         z_pos_filt = filter_pos[:, 2]
         time = df['timestamp']
 
+        # Combine the raw acceleration data into a single vector using the Pythagorean theorem
+        acc_magnitude = np.sqrt(x_acc_raw**2 + y_acc_raw**2 + z_acc_raw**2)
+        acc_world_magnitude = np.sqrt(x_acc_world**2 + y_acc_world**2 + z_acc_world**2)
+        gyro_magnitude = np.sqrt(gyro[:, 0]**2 + gyro[:, 1]**2 + gyro[:, 2]**2)
+
         plt.figure()
+        # plt.plot(time, acc_magnitude, label='Acceleration Magnitude')
+        # plt.plot(time, acc_world_magnitude, label='Acceleration World Magnitude')
+        # plt.plot(time, gyro_magnitude, label='Gyro Magnitude')
+
         # plt.plot(time, x_acc_raw, label='X Accel Raw')
         # plt.plot(time, y_acc_raw, label='Y Accel Raw')
         # plt.plot(time, z_acc_raw, label='Z Accel Raw')
@@ -459,7 +478,22 @@ def main():
 
         # plt.plot(time, altitude, label='Altitude')
 
-        plt.plot(time, euler_angles, label='Orientations')
+        # plt.plot(time, euler_angles[:, 0], label='Euler X')
+        # plt.plot(time, euler_angles[:, 1], label='Euler Y')
+        # plt.plot(time, euler_angles[:, 2], label='Euler Z')
+
+        # plt.plot(time, gyro[:, 0], label='Gyro X')
+        # plt.plot(time, gyro[:, 1], label='Gyro Y')
+        # plt.plot(time, gyro[:, 2], label='Gyro Z')
+
+        # plot a vertical line at the landing time
+        plt.axvline(x=LANDING_TIME, color='red', linestyle='--', label='Landing Time')
+        # plot a vertical line at the launch time
+        plt.axvline(x=LAUNCH_TIME, color='green', linestyle='--', label='Launch Time')
+        # plot a vertical line at the flip time
+        plt.axvline(x=FLIP_TIME, color='orange', linestyle='--', label='Flip Time')
+        # plot a vertical line at the half time
+        plt.axvline(x=HALF_TIME, color='purple', linestyle='--', label='Half Time')
     
         plt.xlabel("Time (s)")
         plt.ylabel("Value")

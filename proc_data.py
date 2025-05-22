@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from pandas import DataFrame
 from scipy.integrate import cumulative_trapezoid
 from scipy.spatial.transform import Rotation as R
 from matplotlib.animation import FuncAnimation
@@ -286,6 +287,17 @@ def plot_acceleration_fft(df):
 def main():
     filename = LOG_DIR + LOG_FILE
     df = load_data(filename)
+
+    outdf = DataFrame()
+    outdf["timestamp"] = df["timestamp"]
+    outdf["dt"] = df["dt"]
+    outdf["acc_x"] = df["accel_x"]
+    outdf["acc_y"] = df["accel_y"]
+    outdf["acc_z"] = df["accel_z"]
+    outdf["gyro_x"] = df["gyro_x"]
+    outdf["gyro_y"] = df["gyro_y"]
+    outdf["gyro_z"] = df["gyro_z"]
+    outdf.to_csv("Unity Simulation/unity_data.csv", index=False, header=False)
 
     print("===========Gyro Stuff===========")
     # print out filtering high and low cut off frequencies

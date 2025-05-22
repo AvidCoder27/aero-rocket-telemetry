@@ -343,18 +343,18 @@ def main():
         # plt.plot(time, z_acc_filtered, label='Z Accel Filtered')
 
         plt.plot(time, x_acc_world, label='X Accel World')
-        plt.plot(time, y_acc_world, label='Y Accel World')
-        plt.plot(time, z_acc_world, label='Z Accel World')
+        # plt.plot(time, y_acc_world, label='Y Accel World')
+        # plt.plot(time, z_acc_world, label='Z Accel World')
 
         # plt.plot(time, x_vel, label='X Vel')
         # plt.plot(time, y_vel, label='Y Vel')
         # plt.plot(time, z_vel, label='Z Vel')
 
-        # plt.plot(time, x_vel_filt, label='X Vel Filtered')
+        plt.plot(time, x_vel_filt, label='X Vel Filtered')
         # plt.plot(time, y_vel_filt, label='Y Vel Filtered')
         # plt.plot(time, z_vel_filt, label='Z Vel Filtered')
 
-        # plt.plot(time, x_pos, label='X Pos')
+        plt.plot(time, x_pos, label='X Pos')
         # plt.plot(time, y_pos, label='Y Pos')
         # plt.plot(time, z_pos, label='Z Pos')
 
@@ -381,7 +381,7 @@ def main():
             # plt.axvline(x=HALF_TIME, color='purple', linestyle='--', label='Half Time')
     
         # plot a dot at every data point for the raw acceleration data
-        plt.scatter(time, x_acc_raw, s=1, color='blue', alpha=0.5, label='X Accel Raw')
+        # plt.scatter(time, x_acc_raw, s=1, color='blue', alpha=0.5, label='X Accel Raw')
 
         plt.xlabel("Time (s)")
         plt.ylabel("Value")

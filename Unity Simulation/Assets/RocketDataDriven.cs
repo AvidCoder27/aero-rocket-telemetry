@@ -68,8 +68,8 @@ public class RocketDataDriven : MonoBehaviour
             Vector3 accel = new Vector3(datum.accelX, datum.accelY, datum.accelZ);
             Vector3 gyro = new Vector3(datum.gyroX, datum.gyroY, datum.gyroZ);
 
-            rb.AddForce(accel, ForceMode.Acceleration);
-            rb.MoveRotation(rb.rotation * Quaternion.Euler(gyro * dt));
+            rb.MoveRotation(rb.rotation * Quaternion.Euler(gyro));
+            rb.AddRelativeForce(accel, ForceMode.Acceleration);
 
             yield return new WaitForSeconds(dt);
         }

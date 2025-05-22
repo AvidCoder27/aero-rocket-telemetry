@@ -3,6 +3,8 @@ using UnityEngine;
 public class FollowOther : MonoBehaviour
 {
     [SerializeField] private Transform target; // The target to follow
+    [SerializeField] private Vector3 offset; // Optional offset to apply to the target's position
+    private Quaternion rotation; // The rotation to apply to the follower
 
     private void Awake()
     {
@@ -11,12 +13,12 @@ public class FollowOther : MonoBehaviour
         {
             Debug.LogError("Target not assigned in the Follower GameObject.");
         }
+        rotation = Quaternion.LookRotation(-offset, Vector3.up);
     }
 
     private void Update()
     {
-        Vector3 relativePos = target.position - transform.position;
-        Quaternion rotation = Quaternion.LookRotation(relativePos, Vector3.up);
+        transform.position = target.position + offset;
         transform.rotation = rotation;
     }
 }

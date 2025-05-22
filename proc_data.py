@@ -32,7 +32,7 @@ ACCEL_Y_OFFSET = -0.30
 ACCEL_Z_OFFSET = 0.15
 
 # Filter out frequencies above these values
-ACCEL_HIGH_CUT = 6  # Hz
+ACCEL_HIGH_CUT = 7  # Hz
 VEL_HIGH_CUT = 3  # Hz
 POS_HIGH_CUT = 2  # Hz
 

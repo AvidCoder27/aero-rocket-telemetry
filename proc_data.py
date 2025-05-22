@@ -33,12 +33,12 @@ ACCEL_Z_OFFSET = 0.15
 
 # Filter out frequencies above these values
 ACCEL_HIGH_CUT = 7  # Hz
-VEL_HIGH_CUT = 3  # Hz
-POS_HIGH_CUT = 2  # Hz
+VEL_HIGH_CUT = 5  # Hz
+POS_HIGH_CUT = 5  # Hz
 
 # Filter out frequencies below these values
-VEL_LOW_CUT = 0.1  # Hz
-POS_LOW_CUT = 0.1  # Hz
+VEL_LOW_CUT = 0.05  # Hz
+POS_LOW_CUT = 0.05  # Hz
 
 SHOW_VERTICAL_LINES = True  # Set to True to show vertical lines at key times
 DO_WORLD_FRAME_ROTATION = True  # Set to True to rotate the accelerometer data into the world frame

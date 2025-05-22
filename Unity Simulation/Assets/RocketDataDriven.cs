@@ -65,8 +65,8 @@ public class RocketDataDriven : MonoBehaviour
         foreach (var datum in data)
         {
             float dt = datum.dt;
-            Vector3 accel = new Vector3(datum.accelX, datum.accelY, datum.accelZ);
-            Vector3 gyro = new Vector3(datum.gyroX, datum.gyroY, datum.gyroZ);
+            Vector3 accel = new Vector3(datum.accelY, -datum.accelX, datum.accelZ);
+            Vector3 gyro = new Vector3(datum.gyroY, datum.gyroX, datum.gyroZ);
 
             rb.MoveRotation(rb.rotation * Quaternion.Euler(gyro));
             rb.AddRelativeForce(accel, ForceMode.Acceleration);
@@ -74,6 +74,7 @@ public class RocketDataDriven : MonoBehaviour
             yield return new WaitForSeconds(dt);
         }
         Debug.Log("Data processing complete.");
+        rb.linearVelocity = Vector3.zero;
         yield return null;
     }
 }

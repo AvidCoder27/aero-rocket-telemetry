@@ -32,7 +32,7 @@ ACCEL_Y_OFFSET = -0.30
 ACCEL_Z_OFFSET = 0.15
 
 # Filter out frequencies above these values
-ACCEL_HIGH_CUT = 15  # Hz
+ACCEL_HIGH_CUT = 6  # Hz
 VEL_HIGH_CUT = 3  # Hz
 POS_HIGH_CUT = 2  # Hz
 
@@ -40,11 +40,13 @@ POS_HIGH_CUT = 2  # Hz
 VEL_LOW_CUT = 0.1  # Hz
 POS_LOW_CUT = 0.1  # Hz
 
+SHOW_VERTICAL_LINES = True  # Set to True to show vertical lines at key times
 DO_WORLD_FRAME_ROTATION = True  # Set to True to rotate the accelerometer data into the world frame
 WINDOW_START = 208
 WINDOW_END = 216
 DISPLAY_DEBUG = True  # Set to True to display debug plots
 SUBTRACT_GRAVITY = True  # Set to True to subtract gravity from the world-frame accelerometer data
+FILTER_ACCEL = True  # Set to True to filter the accelerometer data
 
 LANDING_TIME = 214.8 # seconds
 FLIGHT_TIME = 5.3 # seconds, by video (approx.)
@@ -112,8 +114,9 @@ def integrate_motion(df):
     # recombine the dims after filtering
     filter_acc = np.column_stack((filter_acc_x, filter_acc_y, filter_acc_z))
     
-    # ! reset the filtering on accel
-    filter_acc = acc_body.copy()
+    # undo filtering if not using it
+    if not FILTER_ACCEL:
+        filter_acc = acc_body.copy()
 
     # Rotate the filtered accelerations into the world frame
     if DO_WORLD_FRAME_ROTATION:
@@ -367,15 +370,19 @@ def main():
         # plt.plot(time, gyro[:, 1], label='Gyro Y')
         # plt.plot(time, gyro[:, 2], label='Gyro Z')
 
-        # plot a vertical line at the landing time
-        plt.axvline(x=LANDING_TIME, color='red', linestyle='--', label='Landing Time')
-        # plot a vertical line at the launch time
-        plt.axvline(x=LAUNCH_TIME, color='green', linestyle='--', label='Launch Time')
-        # plot a vertical line at the flip time
-        plt.axvline(x=FLIP_TIME, color='orange', linestyle='--', label='Flip Time')
-        # plot a vertical line at the half time
-        plt.axvline(x=HALF_TIME, color='purple', linestyle='--', label='Half Time')
+        if SHOW_VERTICAL_LINES:
+            # plot a vertical line at the landing time
+            plt.axvline(x=LANDING_TIME, color='red', linestyle='--', label='Landing Time')
+            # plot a vertical line at the launch time
+            plt.axvline(x=LAUNCH_TIME, color='green', linestyle='--', label='Launch Time')
+            # plot a vertical line at the flip time
+            plt.axvline(x=FLIP_TIME, color='orange', linestyle='--', label='Flip Time')
+            # plot a vertical line at the half time
+            # plt.axvline(x=HALF_TIME, color='purple', linestyle='--', label='Half Time')
     
+        # plot a dot at every data point for the raw acceleration data
+        plt.scatter(time, x_acc_raw, s=1, color='blue', alpha=0.5, label='X Accel Raw')
+
         plt.xlabel("Time (s)")
         plt.ylabel("Value")
         plt.title("Debugging Data")
